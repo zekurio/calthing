@@ -1,0 +1,32 @@
+# arr-cal-proxy example configuration.
+# Copy to config.yaml and adjust. ${VAR} references are expanded from the
+# environment at load time; loading fails if a referenced variable is unset.
+
+listen: ":8080"
+
+cache:
+  # How long upstream calendar responses are reused before re-fetching.
+  ttl: 10m
+
+calendar:
+  # Default window for /calendar.ics and /api/events: today-past_days .. today+future_days.
+  past_days: 30
+  future_days: 90
+  # X-WR-CALNAME shown by calendar clients.
+  name: "Media Calendar"
+
+auth:
+  # If set, /calendar.ics requires ?token=<value>. Leave empty to disable.
+  token: ""
+
+instances:
+  - name: movies # unique; part of event UIDs — treat as stable, renaming re-creates events in subscribed calendars
+    type: radarr
+    url: http://127.0.0.1:7878
+    api_key: ${RADARR_API_KEY}
+    include_unmonitored: false
+  - name: tv
+    type: sonarr
+    url: http://127.0.0.1:8989
+    api_key: ${SONARR_API_KEY}
+    include_unmonitored: false

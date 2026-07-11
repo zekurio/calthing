@@ -1,0 +1,5 @@
+# Pin devenv's nixpkgs to the same channel flake.nix tracks so local Go/Node
+# and packaging stay aligned. Bump together with `nix flake update`.
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixos-unstable

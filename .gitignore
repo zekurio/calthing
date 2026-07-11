@@ -1,0 +1,19 @@
+# dev environment
+.devenv/
+.direnv/
+.devenv.flake.nix
+devenv.local.nix
+.pre-commit-config.yaml
+
+# frontend
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+
+# local config & secrets
+config.yaml
+.env
+
+# nix build output
+result
+result-*

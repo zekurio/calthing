@@ -1,0 +1,52 @@
+[
+  {
+    "id": 101,
+    "seriesId": 5,
+    "title": "The Beginning",
+    "seasonNumber": 2,
+    "episodeNumber": 5,
+    "airDateUtc": "2026-07-15T20:00:00Z",
+    "hasFile": false,
+    "monitored": true,
+    "overview": "Things begin, dramatically.",
+    "series": {
+      "title": "Example Show",
+      "runtime": 45,
+      "images": [
+        { "coverType": "banner", "url": "/x/banner.jpg", "remoteUrl": "https://images.example/banner.jpg" },
+        { "coverType": "poster", "url": "/x/poster.jpg", "remoteUrl": "https://images.example/poster.jpg" }
+      ]
+    }
+  },
+  {
+    "id": 102,
+    "seriesId": 5,
+    "title": "No Runtime",
+    "seasonNumber": 2,
+    "episodeNumber": 6,
+    "airDateUtc": "2026-07-16T20:00:00Z",
+    "hasFile": true,
+    "monitored": true,
+    "overview": "",
+    "series": {
+      "title": "Example Show",
+      "runtime": 0,
+      "images": []
+    }
+  },
+  {
+    "id": 103,
+    "seriesId": 7,
+    "title": "TBA",
+    "seasonNumber": 1,
+    "episodeNumber": 1,
+    "hasFile": false,
+    "monitored": true,
+    "overview": "No air date yet.",
+    "series": {
+      "title": "Unscheduled Show",
+      "runtime": 30,
+      "images": []
+    }
+  }
+]

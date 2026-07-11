@@ -1,0 +1,89 @@
+@import '@fontsource-variable/space-grotesk';
+
+:root {
+  --bg: #0f1317;
+  --surface: #161c23;
+  --surface-2: #1d242d;
+  --line: #232c36;
+  --ink: #e9eef3;
+  --muted: #8b96a2;
+  --sonarr: #3ec1f0;
+  --radarr: #f2b63d;
+  --ok: #46d483;
+  --live: #ff5252;
+  --font-ui: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f3f5f7;
+    --surface: #ffffff;
+    --surface-2: #eaeef2;
+    --line: #dde3e9;
+    --ink: #16202a;
+    --muted: #5c6875;
+    --sonarr: #0e8fc0;
+    --radarr: #b57d0a;
+    --ok: #178a4c;
+    --live: #d81f1f;
+    color-scheme: light;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--sonarr);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
