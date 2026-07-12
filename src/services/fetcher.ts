@@ -3,6 +3,10 @@ import { type CalendarEvent, sortEvents, utcStartOfDay } from '../domain/event.t
 import type { InstanceStatusDto } from '../../shared/api.ts'
 import { type ArrFetch, fetchCalendar } from '../upstream/client.ts'
 
+export interface MediaLinker {
+  addLinks(events: CalendarEvent[]): Promise<void>
+}
+
 export interface FetchResult {
   events: CalendarEvent[]
   instances: InstanceStatusDto[]
@@ -29,6 +33,8 @@ export class Fetcher {
   readonly #ttlMs: number
   readonly #fetchInstance: ArrFetch
   readonly #now: Clock
+  readonly #mediaLinker?: MediaLinker
+  readonly #episodeDelayMs: number
   readonly #cache = new Map<string, CacheEntry>()
   readonly #inflight = new Map<string, Promise<CacheEntry>>()
 
@@ -37,11 +43,15 @@ export class Fetcher {
     ttlMs: number,
     fetchInstance: ArrFetch = fetchCalendar,
     now: Clock = () => new Date(),
+    mediaLinker?: MediaLinker,
+    episodeDelayMs = 0,
   ) {
     this.#instances = instances
     this.#ttlMs = ttlMs
     this.#fetchInstance = fetchInstance
     this.#now = now
+    this.#mediaLinker = mediaLinker
+    this.#episodeDelayMs = episodeDelayMs
   }
 
   async fetch(start: Date, end: Date): Promise<FetchResult> {
@@ -52,6 +62,13 @@ export class Fetcher {
     )
 
     const events = results.flatMap((result) => result.events)
+    if (this.#mediaLinker) {
+      try {
+        await this.#mediaLinker.addLinks(events)
+      } catch (error) {
+        console.warn(`jellyfin link lookup failed: error=${errorMessage(error)}`)
+      }
+    }
     sortEvents(events)
     return {
       events,
@@ -96,7 +113,18 @@ export class Fetcher {
     let events: CalendarEvent[] = []
     let error: string | undefined
     try {
-      events = await this.#fetchInstance(instance, start, end)
+      const delay = instance.type === 'sonarr' ? this.#episodeDelayMs : 0
+      const upstreamStart = new Date(start.getTime() - delay)
+      const upstreamEnd = new Date(end.getTime() - delay)
+      events = await this.#fetchInstance(instance, upstreamStart, upstreamEnd)
+      if (delay > 0) {
+        for (const event of events) {
+          if (event.kind !== 'episode') continue
+          event.start = new Date(event.start.getTime() + delay)
+          event.end = new Date(event.end.getTime() + delay)
+        }
+      }
+      events = events.filter((event) => event.start >= start && event.start < end)
     } catch (cause) {
       error = errorMessage(cause)
       console.warn(`instance fetch failed: instance=${instance.name} error=${error}`)

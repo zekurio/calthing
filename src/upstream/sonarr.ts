@@ -12,6 +12,7 @@ interface SonarrEpisode {
   airDateUtc?: string
   hasFile?: boolean
   overview?: string
+  tvdbId?: number
   series?: {
     title: string
     runtime?: number
@@ -56,6 +57,8 @@ export async function fetchSonarr(
       downloaded: episode.hasFile ?? false,
       overview: episode.overview ?? '',
       posterUrl: posterUrl(series?.images),
+      providerIds: episode.tvdbId ? { Tvdb: String(episode.tvdbId) } : {},
+      jellyfinUrl: '',
     })
   }
 

@@ -12,6 +12,8 @@ calendar:
   # Default window for /calendar.ics and /api/events: today-past_days .. today+future_days.
   past_days: 30
   future_days: 90
+  # Added to episode air times to account for download and transcode time.
+  availability_delay: 1h
   # X-WR-CALNAME shown by calendar clients.
   name: 'Media Calendar'
 
@@ -30,3 +32,17 @@ instances:
     url: http://127.0.0.1:8989
     api_key: ${SONARR_API_KEY}
     include_unmonitored: false
+# Branding shown above the web calendar. When icon_url is empty, a built-in
+# cinema-ticket icon is used. The URL may point to an SVG or raster image.
+branding:
+  name: Jellyfin
+  icon_url: ''
+  page_title: 'Jellyfin · Was läuft'
+  description: 'Das gemeinsame Film- und Serienprogramm.'
+
+# Optional Jellyfin integration. `url` is used only by arr-cal-proxy for API
+# calls; `public_url` is used for links opened by calendar visitors.
+# jellyfin:
+#   url: http://127.0.0.1:8096
+#   public_url: https://jellyfin.example.com
+#   api_key: ${JELLYFIN_API_KEY}

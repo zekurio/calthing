@@ -15,6 +15,8 @@ export interface CalendarEvent {
   downloaded: boolean
   overview: string
   posterUrl: string
+  providerIds?: Record<string, string>
+  jellyfinUrl?: string
 }
 
 export function episodeUid(instance: string, episodeId: number): string {
@@ -71,5 +73,6 @@ export function toEventDto(event: CalendarEvent): EventDto {
     downloaded: event.downloaded,
     overview: event.overview,
     posterUrl: event.posterUrl,
+    jellyfinUrl: event.jellyfinUrl ?? '',
   }
 }

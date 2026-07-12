@@ -90,11 +90,10 @@ Deno.test('generateCalendar emits metadata, summaries, escaping, and date forms'
       'REFRESH-INTERVAL;VALUE=DURATION:PT1H\r\n',
       'X-PUBLISHED-TTL:PT1H\r\n',
       'SUMMARY:Example Show S02E05 - The Beginning\r\n',
-      'SUMMARY:✔ Example Movie (Digital Release)\r\n',
+      'SUMMARY:✔ Example Movie (Digitalstart)\r\n',
       'DESCRIPTION:Things begin\\, dramatically.\\nWith a newline\\, a comma\\, and\r\n  a\\; semicolon.\r\n',
       'CATEGORIES:tv\r\n',
       'DTSTART:20260715T200000Z\r\n',
-      'DTEND:20260715T204500Z\r\n',
       'DTSTART;VALUE=DATE:20260720\r\n',
       'DTEND;VALUE=DATE:20260721\r\n',
     ]
@@ -128,9 +127,21 @@ Deno.test('generateCalendar renders every movie summary and omits empty descript
   ]
   const output = generateCalendar('Kinds', events, fixedNow)
 
-  assert(output.includes('SUMMARY:Cinema (Cinema Release)\r\n'), 'cinema summary differs')
-  assert(output.includes('SUMMARY:✔ Physical (Physical Release)\r\n'), 'physical summary differs')
+  assert(output.includes('SUMMARY:Cinema (Kinostart)\r\n'), 'cinema summary differs')
+  assert(output.includes('SUMMARY:✔ Physical (Heimkinostart)\r\n'), 'physical summary differs')
   assertEquals(output.includes('DESCRIPTION:'), false, 'empty descriptions must be omitted')
+})
+
+Deno.test('generateCalendar links episodes available on Jellyfin', () => {
+  const event = fixtureEvents()[0]
+  if (!event) throw new Error('missing fixture event')
+  event.jellyfinUrl = 'https://watch.example/web/#/details?id=episode-id'
+
+  const calendar = generateCalendar('Media', [event], new Date('2026-01-01T00:00:00Z'))
+  assert(
+    calendar.includes('URL:https://watch.example/web/#/details?id=episode-id\r\n'),
+    'calendar should contain the Jellyfin URL',
+  )
 })
 
 Deno.test('generateCalendar folds at UTF-8 byte boundaries and preserves content', () => {

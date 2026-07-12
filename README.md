@@ -41,6 +41,7 @@ cache:
 calendar:
   past_days: 30 # default window: today-30d .. today+90d
   future_days: 90
+  availability_delay: 1h # show episodes after download/transcode time
   name: 'Media Calendar' # calendar name shown by clients
 
 auth:
@@ -57,6 +58,25 @@ instances:
     url: http://127.0.0.1:8989
     api_key: ${SONARR_API_KEY}
 ```
+
+The web calendar branding and optional Jellyfin linking are configured separately:
+
+```yaml
+branding:
+  name: Our Jellyfin
+  icon_url: https://example.com/mark.svg # optional; built-in ticket icon otherwise
+  page_title: 'Our Jellyfin · What is on'
+  description: 'The shared movie and TV schedule.'
+
+jellyfin:
+  url: http://127.0.0.1:8096             # private API address
+  public_url: https://jellyfin.example.com # links shown to visitors
+  api_key: ${JELLYFIN_API_KEY}
+```
+
+When configured, arr-cal-proxy matches Sonarr episodes to Jellyfin by TVDB episode ID. Available
+episodes get a direct Jellyfin link in their event details. The API key and private URL stay on the
+server and are never returned to the browser.
 
 `${VAR}` references are expanded from the environment at startup and fail loudly when unset — pair
 them with a systemd `EnvironmentFile` for secrets. `ARR_CAL_PROXY_LISTEN`, `ARR_CAL_PROXY_TOKEN`,
@@ -122,13 +142,18 @@ NixOS module:
 
 ### Updating dependencies
 
-Dependencies are pinned by `deno.json`, `deno.lock`, and the checked-in `vendor/` tree. Run
-`deno install --frozen=false` after changing dependency versions, then commit the updated lockfile
-and vendor tree.
+Dependencies are pinned by `deno.json` and `deno.lock`; the lockfile is the single source of truth.
+The local `vendor/` (jsr modules, via `"vendor": true`) and `node_modules/` (npm packages)
+directories are generated artifacts — `deno install` recreates both from the lockfile, and neither
+is checked in. After changing dependency versions (`deno outdated --update` or editing `deno.json`),
+run `deno install` and commit the updated `deno.json` and `deno.lock`.
 
-Nix stores the target-specific Deno `node_modules` hashes in `denoDepsHashes` in
-[`nix/package.nix`](nix/package.nix). Update each hash on its corresponding system by temporarily
-replacing it with `lib.fakeHash`, running `nix build`, and copying the reported `got:` hash.
+Nix resolves the lockfile in a fixed-output derivation that emits both directories, with
+target-specific hashes in `denoDepsHashes` in [`nix/package.nix`](nix/package.nix). After a
+dependency change, regenerate all four hashes from any machine with
+[`nix/update-deps-hashes.sh`](nix/update-deps-hashes.sh) (it replays the derivation's
+`deno install --os/--arch` cross-install for every target and hashes the result), then paste its
+output into `denoDepsHashes` and confirm with `nix build`.
 
 ## Development
 

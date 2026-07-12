@@ -1,15 +1,9 @@
 import { treaty } from '@elysiajs/eden'
 import type { App } from '../../../src/http/app.ts'
-import type { EventsResponse, Kind } from '../../../shared/api.ts'
+import type { EventsResponse } from '../../../shared/api.ts'
+import { t } from './i18n.svelte.ts'
 
 const client = treaty<App>(location.origin)
-
-export const KIND_LABELS: Record<Kind, string> = {
-  episode: 'Episode',
-  'movie-cinema': 'Cinema release',
-  'movie-digital': 'Digital release',
-  'movie-physical': 'Physical release',
-}
 
 export async function fetchEvents(
   start: string,
@@ -22,7 +16,7 @@ export async function fetchEvents(
   })
 
   if (error) {
-    throw new Error(`Loading events failed (${status})`)
+    throw new Error(t('loadFailed', { status }))
   }
 
   return data

@@ -5,8 +5,9 @@
 devenv.local.nix
 .pre-commit-config.yaml
 
-# Deno-managed npm dependencies and frontend output
+# Deno-managed dependencies (regenerate with `deno install`) and frontend output
 node_modules/
+vendor/
 frontend/dist/*
 
 # local config & secrets

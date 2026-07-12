@@ -26,6 +26,7 @@ function event(uid: string, start: string): CalendarEvent {
     downloaded: true,
     overview: 'Overview',
     posterUrl: 'https://example.test/poster.jpg',
+    jellyfinUrl: '',
   }
 }
 
@@ -79,6 +80,7 @@ Deno.test('toEventDto converts dates to Go-compatible RFC3339 strings', () => {
     downloaded: true,
     overview: 'Overview',
     posterUrl: 'https://example.test/poster.jpg',
+    jellyfinUrl: '',
   })
   assertEquals(domain.start.toISOString(), '2025-02-03T04:05:06.120Z')
 })

@@ -20,9 +20,21 @@ export interface Config {
     pastDays: number
     futureDays: number
     name: string
+    availabilityDelayMs: number
   }
   auth: {
     token: string
+  }
+  branding: {
+    name: string
+    iconUrl: string
+    pageTitle: string
+    description: string
+  }
+  jellyfin: {
+    url: string
+    publicUrl: string
+    apiKey: string
   }
   instances: Instance[]
 }
@@ -32,6 +44,7 @@ const DEFAULT_TTL_MS = 10 * 60 * 1000
 const DEFAULT_PAST_DAYS = 30
 const DEFAULT_FUTURE_DAYS = 90
 const DEFAULT_CALENDAR_NAME = 'Media Calendar'
+const DEFAULT_BRAND_NAME = 'Jellyfin'
 
 const DURATION_UNITS: Readonly<Record<string, number>> = {
   ns: 1 / 1_000_000,
@@ -155,6 +168,26 @@ function validate(config: Config): void {
   if (config.calendar.pastDays < 0 || config.calendar.futureDays < 0) {
     throw new Error('config: calendar.past_days and future_days must be >= 0')
   }
+  if (config.calendar.availabilityDelayMs < 0) {
+    throw new Error('config: calendar.availability_delay must be >= 0')
+  }
+
+  const jellyfinValues = [config.jellyfin.url, config.jellyfin.publicUrl, config.jellyfin.apiKey]
+  if (jellyfinValues.some(Boolean) && jellyfinValues.some((value) => !value)) {
+    throw new Error('config: jellyfin.url, public_url, and api_key must be set together')
+  }
+  for (const [path, value] of [
+    ['branding.icon_url', config.branding.iconUrl],
+    ['jellyfin.url', config.jellyfin.url],
+    ['jellyfin.public_url', config.jellyfin.publicUrl],
+  ] as const) {
+    if (!value) continue
+    try {
+      new URL(value)
+    } catch {
+      throw new Error(`config: ${path}: invalid url ${JSON.stringify(value)}`)
+    }
+  }
 
   const names = new Set<string>()
   for (let index = 0; index < config.instances.length; index++) {
@@ -216,6 +249,8 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
   const cache = record(root.cache, 'cache')
   const calendar = record(root.calendar, 'calendar')
   const auth = record(root.auth, 'auth')
+  const branding = record(root.branding, 'branding')
+  const jellyfin = record(root.jellyfin, 'jellyfin')
   if (root.instances !== undefined && !Array.isArray(root.instances)) {
     throw new Error('parse config: instances must be a sequence')
   }
@@ -228,6 +263,14 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
       throw new Error(`parse config: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  let availabilityDelayMs = 0
+  if (calendar.availability_delay !== undefined && calendar.availability_delay !== null) {
+    try {
+      availabilityDelayMs = parseDuration(calendar.availability_delay)
+    } catch (error) {
+      throw new Error(`parse config: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 
   const config: Config = {
     listen: stringValue(root.listen, DEFAULT_LISTEN, 'listen'),
@@ -236,8 +279,20 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
       pastDays: integerValue(calendar.past_days, DEFAULT_PAST_DAYS, 'calendar.past_days'),
       futureDays: integerValue(calendar.future_days, DEFAULT_FUTURE_DAYS, 'calendar.future_days'),
       name: stringValue(calendar.name, DEFAULT_CALENDAR_NAME, 'calendar.name'),
+      availabilityDelayMs,
     },
     auth: { token: stringValue(auth.token, '', 'auth.token') },
+    branding: {
+      name: stringValue(branding.name, DEFAULT_BRAND_NAME, 'branding.name'),
+      iconUrl: stringValue(branding.icon_url, '', 'branding.icon_url'),
+      pageTitle: stringValue(branding.page_title, '', 'branding.page_title'),
+      description: stringValue(branding.description, '', 'branding.description'),
+    },
+    jellyfin: {
+      url: stringValue(jellyfin.url, '', 'jellyfin.url'),
+      publicUrl: stringValue(jellyfin.public_url, '', 'jellyfin.public_url'),
+      apiKey: stringValue(jellyfin.api_key, '', 'jellyfin.api_key'),
+    },
     instances: (root.instances ?? []).map(parseInstance),
   }
 

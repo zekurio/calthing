@@ -10,6 +10,7 @@ export interface AppConfig {
   cache: { ttlMs: number }
   calendar: { pastDays: number; futureDays: number; name: string }
   auth: { token: string }
+  branding: { name: string; iconUrl: string; pageTitle: string; description: string }
   instances: readonly unknown[]
 }
 
@@ -58,6 +59,7 @@ const eventSchema = t.Object({
   downloaded: t.Boolean(),
   overview: t.String(),
   posterUrl: t.String(),
+  jellyfinUrl: t.String(),
 })
 
 const instanceStatusSchema = t.Object({
@@ -71,6 +73,12 @@ const instanceStatusSchema = t.Object({
 const eventsResponseSchema = t.Object({
   events: t.Array(eventSchema),
   instances: t.Array(instanceStatusSchema),
+  branding: t.Object({
+    name: t.String(),
+    iconUrl: t.String(),
+    pageTitle: t.String(),
+    description: t.String(),
+  }),
 })
 
 const healthResponseSchema = t.Object({
@@ -181,6 +189,7 @@ export function createApp(dependencies: AppDependencies) {
       return {
         events: result.events.map(toEventDto),
         instances: result.instances,
+        branding: config.branding,
       }
     }, {
       query: querySchema,

@@ -5,10 +5,10 @@
   makeWrapper,
   version ? "0.1.0",
   denoDepsHashes ? {
-    aarch64-darwin = "sha256-M+04/5t+8p+euVgqrCaGYLmN/88ZzxCwRgZ6V2EH59g=";
-    x86_64-darwin = "sha256-bbNpUOYCQUPGNsmxEphncHWcYqoSgzEXEZ6Cy9Et3Pc=";
-    aarch64-linux = "sha256-GUSQ2ZSJ4JvGy6gQzGatiUpHGA8wiGpAa2Q4B6VvrRY=";
-    x86_64-linux = "sha256-J6LBGuq/Rgc/dZKFfGzpOHjlGz/AoZ8j/dnar/pw/ts=";
+    aarch64-darwin = "sha256-p8NB8Z4nKvZKCAUh3R5VsZaoaRbO7tHN7wvaA+amiLI=";
+    x86_64-darwin = "sha256-Qj909sIU2+H4Bc/u/w6pV1r38iKe5TyrNPPTXOfn1kw=";
+    aarch64-linux = "sha256-pFXBoAmm9cnF5reRby+zCV2TslYBaE4r12ga1Q2NJ+g=";
+    x86_64-linux = "sha256-5bH3vEo02y8qMDHbTsjZMdRFBL699qECjt+iPTgXAXg=";
   },
 }:
 
@@ -22,7 +22,6 @@ let
     fileset = lib.fileset.unions [
       ../deno.json
       ../deno.lock
-      ../vendor
     ];
   };
 
@@ -38,11 +37,13 @@ let
       ../frontend/vite.config.ts
       ../shared
       ../src
-      ../vendor
     ];
   };
 
-  denoNodeModules = stdenvNoCC.mkDerivation {
+  # Fixed-output derivation resolving deno.lock into the two artifact
+  # directories Deno uses at run time: node_modules (npm packages) and
+  # vendor (jsr modules, via `"vendor": true` in deno.json).
+  denoDeps = stdenvNoCC.mkDerivation {
     pname = "arr-cal-proxy-deno-dependencies";
     inherit version;
     src = dependencySource;
@@ -61,7 +62,8 @@ let
       runHook preInstall
       mkdir -p $out
       rm -f node_modules/.deno/.setup-cache.bin node_modules/.deno/.deno.lock
-      cp -a node_modules/. $out/
+      cp -a node_modules $out/node_modules
+      cp -a vendor $out/vendor
       runHook postInstall
     '';
 
@@ -80,7 +82,8 @@ let
 
     buildPhase = ''
       runHook preBuild
-      ln -s ${denoNodeModules} node_modules
+      ln -s ${denoDeps}/node_modules node_modules
+      ln -s ${denoDeps}/vendor vendor
       export DENO_DIR=$TMPDIR/deno-cache
       deno run --cached-only --node-modules-dir=manual -A vite build frontend
       runHook postBuild
@@ -106,8 +109,9 @@ stdenvNoCC.mkDerivation {
 
     app=$out/share/arr-cal-proxy
     mkdir -p $app $out/bin
-    cp -r deno.json deno.lock shared src vendor $app/
-    ln -s ${denoNodeModules} $app/node_modules
+    cp -r deno.json deno.lock shared src $app/
+    ln -s ${denoDeps}/node_modules $app/node_modules
+    ln -s ${denoDeps}/vendor $app/vendor
     cp -r ${frontend} $app/frontend
 
     makeWrapper ${deno}/bin/deno $out/bin/arr-cal-proxy \

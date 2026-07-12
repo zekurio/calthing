@@ -9,6 +9,7 @@ calendar:
   past_days: 7
   future_days: 14
   name: Test Calendar
+  availability_delay: 45m
 auth:
   token: secret
 instances:
@@ -32,6 +33,7 @@ Deno.test('parseConfig loads explicit values', () => {
     pastDays: 7,
     futureDays: 14,
     name: 'Test Calendar',
+    availabilityDelayMs: 45 * 60 * 1000,
   })
   assertEquals(config.auth.token, 'secret')
   assertEquals(config.instances, [
@@ -70,11 +72,53 @@ instances:
     pastDays: 30,
     futureDays: 90,
     name: 'Media Calendar',
+    availabilityDelayMs: 0,
   })
   assertEquals(config.auth.token, '')
+  assertEquals(config.branding, {
+    name: 'Jellyfin',
+    iconUrl: '',
+    pageTitle: '',
+    description: '',
+  })
+  assertEquals(config.jellyfin, { url: '', publicUrl: '', apiKey: '' })
 
   const compound = parseConfig(validYaml.replace('5m', '1h30m500ms'), {})
   assertEquals(compound.cache.ttlMs, 5_400_500)
+})
+
+Deno.test('parseConfig loads branding and private/public Jellyfin URLs', () => {
+  const config = parseConfig(`${validYaml}
+branding:
+  name: Friendsflix
+  icon_url: https://static.example/ticket.svg
+  page_title: Friendsflix Programm
+  description: Unser gemeinsames Programm
+jellyfin:
+  url: http://jellyfin.internal:8096
+  public_url: https://watch.example
+  api_key: jellyfin-key
+`, {})
+
+  assertEquals(config.branding, {
+    name: 'Friendsflix',
+    iconUrl: 'https://static.example/ticket.svg',
+    pageTitle: 'Friendsflix Programm',
+    description: 'Unser gemeinsames Programm',
+  })
+  assertEquals(config.jellyfin, {
+    url: 'http://jellyfin.internal:8096',
+    publicUrl: 'https://watch.example',
+    apiKey: 'jellyfin-key',
+  })
+})
+
+Deno.test('parseConfig rejects partial Jellyfin configuration', () => {
+  assertThrows(
+    () => parseConfig(`${validYaml}\njellyfin: {url: http://jellyfin:8096}`, {}),
+    Error,
+    'jellyfin.url, public_url, and api_key must be set together',
+  )
 })
 
 Deno.test('parseConfig expands environment references and applies non-empty overrides', () => {

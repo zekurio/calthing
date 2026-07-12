@@ -83,13 +83,13 @@ function eventSummary(event: CalendarEvent): string {
       }
       break
     case 'movie-cinema':
-      summary = `${event.title} (Cinema Release)`
+      summary = `${event.title} (Kinostart)`
       break
     case 'movie-digital':
-      summary = `${event.title} (Digital Release)`
+      summary = `${event.title} (Digitalstart)`
       break
     case 'movie-physical':
-      summary = `${event.title} (Physical Release)`
+      summary = `${event.title} (Heimkinostart)`
       break
     default:
       summary = event.title
@@ -122,13 +122,15 @@ export function generateCalendar(
     if (event.overview !== '') {
       output += property('DESCRIPTION', event.overview)
     }
+    if (event.jellyfinUrl) {
+      output += property('URL', event.jellyfinUrl, false)
+    }
     output += property('CATEGORIES', event.instance)
     if (event.allDay) {
       output += foldLine(`DTSTART;VALUE=DATE:${calendarDate(event.start)}`)
       output += foldLine(`DTEND;VALUE=DATE:${calendarDate(event.end)}`)
     } else {
       output += foldLine(`DTSTART:${utcTimestamp(event.start)}`)
-      output += foldLine(`DTEND:${utcTimestamp(event.end)}`)
     }
     output += 'END:VEVENT' + CRLF
   }

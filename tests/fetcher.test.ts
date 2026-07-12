@@ -97,6 +97,30 @@ Deno.test('events merge deterministically by start then UID', async () => {
   assertEquals(result.events.map((event) => event.uid).join(','), 'a-tie@test,z-tie@test,z@test')
 })
 
+Deno.test('episode availability delay shifts air time and expands Sonarr bounds', async () => {
+  const requestedStart = new Date('2026-07-01T00:00:00Z')
+  const requestedEnd = new Date('2026-08-01T00:00:00Z')
+  let upstreamBounds = ''
+  const upstream: ArrFetch = async (instance, start, end) => {
+    upstreamBounds = `${start.toISOString()}|${end.toISOString()}`
+    return [testEvent(instance, new Date('2026-06-30T23:30:00Z'))]
+  }
+  const fetcher = new Fetcher(
+    instances.slice(0, 1),
+    60_000,
+    upstream,
+    undefined,
+    undefined,
+    60 * 60_000,
+  )
+
+  const result = await fetcher.fetch(requestedStart, requestedEnd)
+
+  assertEquals(upstreamBounds, '2026-06-30T23:00:00.000Z|2026-07-31T23:00:00.000Z')
+  assertEquals(result.events[0]?.start.toISOString(), '2026-07-01T00:30:00.000Z')
+  assertEquals(result.events[0]?.end.toISOString(), '2026-07-01T00:31:00.000Z')
+})
+
 Deno.test('UTC day cache keys share sub-day windows and expire at TTL', async () => {
   let calls = 0
   let now = new Date('2026-07-10T12:00:00Z')

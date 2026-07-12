@@ -1,35 +1,41 @@
-@import '@fontsource-variable/space-grotesk';
+@import '@fontsource/barlow-condensed/600.css';
+@import '@fontsource/barlow-condensed/700.css';
+@import '@fontsource-variable/instrument-sans';
 
 :root {
-  --bg: #0f1317;
-  --surface: #161c23;
-  --surface-2: #1d242d;
-  --line: #232c36;
-  --ink: #e9eef3;
-  --muted: #8b96a2;
-  --sonarr: #3ec1f0;
-  --radarr: #f2b63d;
-  --ok: #46d483;
-  --live: #ff5252;
-  --font-ui: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
-  --font-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
-  color-scheme: dark;
+  --bg: #e7e4f2;
+  --surface: #f9f6ed;
+  --surface-2: #eeeaf8;
+  --line: #29213f;
+  --ink: #211a33;
+  --muted: #706985;
+  --sonarr: #168dad;
+  --radarr: #ed7c43;
+  --ok: #2b7b61;
+  --live: #d9475c;
+  --glow: rgb(255 255 255 / 0.55);
+  --on-accent: #ffffff;
+  --font-display: 'Barlow Condensed', Impact, sans-serif;
+  --font-ui: 'Instrument Sans Variable', 'Instrument Sans', system-ui, sans-serif;
+  --font-mono: 'Barlow Condensed', ui-monospace, monospace;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f3f5f7;
-    --surface: #ffffff;
-    --surface-2: #eaeef2;
-    --line: #dde3e9;
-    --ink: #16202a;
-    --muted: #5c6875;
-    --sonarr: #0e8fc0;
-    --radarr: #b57d0a;
-    --ok: #178a4c;
-    --live: #d81f1f;
-    color-scheme: light;
-  }
+/* Lights-down counterpart: same inked-outline identity, keep in sync with theme.svelte.ts. */
+:root[data-theme='dark'] {
+  --bg: #1c1728;
+  --surface: #272134;
+  --surface-2: #322a45;
+  --line: #cec6e4;
+  --ink: #ece8f6;
+  --muted: #9c94b5;
+  --sonarr: #3aa9c9;
+  --radarr: #f08a55;
+  --ok: #4caf8d;
+  --live: #e66276;
+  --glow: rgb(151 132 219 / 0.1);
+  --on-accent: #14101f;
+  color-scheme: dark;
 }
 
 * {
@@ -50,6 +56,15 @@ body {
   line-height: 1.45;
 }
 
+/* Viewport-fixed highlight; on the scrolling body it would tile and seam. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(circle at 12% 8%, var(--glow), transparent 28%);
+}
+
 #app {
   height: 100%;
   display: flex;
@@ -67,15 +82,15 @@ button {
 
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--sonarr);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: 3px solid var(--sonarr);
+  outline-offset: 3px;
 }
 
 .mono {
   font-family: var(--font-mono);
-  font-size: 0.85em;
-  letter-spacing: 0.02em;
+  font-size: 0.92em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 @media (prefers-reduced-motion: reduce) {

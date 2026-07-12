@@ -1,6 +1,7 @@
 import { type Config, loadConfig } from './config.ts'
 import { createApp } from './http/app.ts'
 import { Fetcher } from './services/fetcher.ts'
+import { JellyfinClient } from './upstream/jellyfin.ts'
 
 export interface ListenAddress {
   hostname: string
@@ -79,9 +80,17 @@ function installShutdownSignals(controller: AbortController): () => void {
 }
 
 export function buildApp(config: Config, staticDir?: string) {
+  const jellyfin = config.jellyfin.url ? new JellyfinClient(config.jellyfin) : undefined
   return createApp({
     config,
-    fetcher: new Fetcher(config.instances, config.cache.ttlMs),
+    fetcher: new Fetcher(
+      config.instances,
+      config.cache.ttlMs,
+      undefined,
+      undefined,
+      jellyfin,
+      config.calendar.availabilityDelayMs,
+    ),
     staticDir,
   })
 }

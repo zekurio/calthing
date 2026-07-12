@@ -6,7 +6,8 @@
   },
   "imports": {
     "@elysiajs/eden": "npm:@elysiajs/eden@1.4.9",
-    "@fontsource-variable/space-grotesk/": "npm:@fontsource-variable/space-grotesk@5.2.10/",
+    "@fontsource-variable/instrument-sans": "npm:@fontsource-variable/instrument-sans@^5.2.8",
+    "@fontsource/barlow-condensed": "npm:@fontsource/barlow-condensed@^5.2.8",
     "@tsconfig/svelte": "npm:@tsconfig/svelte@5.0.8",
     "@types/deno": "npm:@types/deno@2.7.0",
     "@std/assert": "jsr:@std/assert@1.0.14",
@@ -23,7 +24,10 @@
     "check": "deno check src/ shared/ tests/ && deno task frontend:check",
     "test": "deno test --allow-env --allow-read tests/",
     "start": "deno run --allow-env --allow-net --allow-read src/main.ts",
-    "dev": "deno run --watch --allow-env --allow-net --allow-read src/main.ts",
+    "dev": {
+      "dependencies": ["backend:dev", "frontend:dev"]
+    },
+    "backend:dev": "deno run --env-file=.env --watch --allow-env --allow-net --allow-read src/main.ts -config config.yaml",
     "frontend:dev": "deno run -A vite frontend",
     "frontend:check": "deno run -A svelte-check --tsconfig frontend/tsconfig.json",
     "frontend:build": "deno run -A vite build frontend"

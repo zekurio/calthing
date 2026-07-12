@@ -1,10 +1,10 @@
 <script lang="ts">
   import { dayLabel, eventDay, formatTime, sxxeyy } from '../lib/dates'
   import type { EventDto } from '../../../shared/api.ts'
-  import { KIND_LABELS } from '../lib/api'
+  import { kindLabel, t } from '../lib/i18n.svelte.ts'
   import Poster from './Poster.svelte'
 
-  let { event }: { event: EventDto } = $props()
+  let { event, color }: { event: EventDto; color?: string } = $props()
 </script>
 
 <article class={event.source}>
@@ -22,22 +22,27 @@
     {/if}
 
     <div class="badges">
-      <span class="badge {event.source}">{event.instance}</span>
-      <span class="badge">{KIND_LABELS[event.kind]}</span>
+      <span class="badge instance" style:--instance-color={color}>{event.instance}</span>
+      <span class="badge">{kindLabel(event.kind)}</span>
       {#if event.downloaded}
-        <span class="badge ok">✓ Downloaded</span>
+        <span class="badge ok">✓ {t('available')}</span>
       {:else}
-        <span class="badge">Pending</span>
+        <span class="badge">{t('pending')}</span>
       {/if}
     </div>
 
     <p class="when mono">
-      {dayLabel(eventDay(event))}{#if !event.allDay}
-        · {formatTime(event.start)}–{formatTime(event.end)}{/if}
+      {dayLabel(eventDay(event))}{#if !event.allDay}&nbsp;· {formatTime(event.start)}{/if}
     </p>
 
     {#if event.overview}
       <p class="overview">{event.overview}</p>
+    {/if}
+
+    {#if event.jellyfinUrl}
+      <a class="watch" href={event.jellyfinUrl} target="_blank" rel="noreferrer">
+        {t('watchOnJellyfin')} <span aria-hidden="true">↗</span>
+      </a>
     {/if}
   </div>
 </article>
@@ -92,6 +97,11 @@
     border-color: color-mix(in srgb, var(--radarr) 40%, transparent);
   }
 
+  .badge.instance {
+    color: var(--instance-color, var(--muted));
+    border-color: color-mix(in srgb, var(--instance-color, var(--muted)) 45%, transparent);
+  }
+
   .badge.ok {
     color: var(--ok);
     border-color: color-mix(in srgb, var(--ok) 40%, transparent);
@@ -109,6 +119,20 @@
     line-height: 1.55;
     color: var(--ink);
   }
+
+  .watch {
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 7px 12px;
+    border: 2px solid var(--line);
+    border-radius: 4px 10px 4px 9px;
+    background: var(--sonarr);
+    color: var(--on-accent);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .watch:hover { box-shadow: 3px 3px 0 var(--line); transform: translate(-1px, -1px); }
 
   @media (max-width: 540px) {
     article {

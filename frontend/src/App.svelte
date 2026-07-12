@@ -2,24 +2,28 @@
   import { createQuery } from '@tanstack/svelte-query'
   import type { EventDto } from '../../shared/api.ts'
   import { fetchEvents } from './lib/api'
-  import { addDays, dayLabel, eventDay, monthGrid, sameDay, startOfMonth, ymd } from './lib/dates'
+  import { addDays, dayLabel, eventDay, monthGrid, sameDay, startOfWeek, ymd } from './lib/dates'
   import Header from './components/Header.svelte'
   import MonthGrid from './components/MonthGrid.svelte'
+  import WeekGrid from './components/WeekGrid.svelte'
   import AgendaList from './components/AgendaList.svelte'
   import EventDetail from './components/EventDetail.svelte'
   import EventChip from './components/EventChip.svelte'
   import Modal from './components/Modal.svelte'
+  import { applyBrandingMetadata, DEFAULT_BRANDING } from './lib/branding'
+  import { buildInstanceColors } from './lib/instanceColors'
+  import { t } from './lib/i18n.svelte.ts'
 
-  type View = 'month' | 'agenda'
+  type View = 'month' | 'week' | 'agenda'
   type ModalState = { kind: 'event'; event: EventDto } | { kind: 'day'; date: Date } | null
 
   const initialView = (): View => {
     const fromURL = new URLSearchParams(location.search).get('view')
     const v = fromURL ?? localStorage.getItem('view')
-    return v === 'agenda' ? 'agenda' : 'month'
+    return v === 'agenda' || v === 'week' || v === 'month' ? v : 'month'
   }
   let view = $state<View>(initialView())
-  let viewDate = $state(startOfMonth(new Date()))
+  let viewDate = $state(new Date())
   let hidden = $state(new Set<string>(JSON.parse(localStorage.getItem('hiddenInstances') ?? '[]')))
   let modal = $state<ModalState>(null)
 
@@ -34,6 +38,14 @@
       return {
         start: ymd(cells[0]),
         end: ymd(addDays(cells[41], 1)),
+      }
+    }
+
+    if (view === 'week') {
+      const start = startOfWeek(viewDate)
+      return {
+        start: ymd(start),
+        end: ymd(addDays(start, 7)),
       }
     }
 
@@ -52,6 +64,8 @@
 
   const events = $derived(eventsQuery.data?.events ?? [])
   const instances = $derived(eventsQuery.data?.instances ?? [])
+  const branding = $derived(eventsQuery.data?.branding ?? DEFAULT_BRANDING)
+  const instanceColors = $derived(buildInstanceColors(instances))
   const loading = $derived(eventsQuery.isFetching)
   const error = $derived(eventsQuery.error?.message ?? '')
   const visible = $derived(events.filter((e) => !hidden.has(e.instance)))
@@ -61,6 +75,8 @@
     if (m?.kind !== 'day') return []
     return visible.filter((e) => sameDay(eventDay(e), m.date))
   })
+
+  $effect(() => applyBrandingMetadata(branding))
 
   function toggleInstance(name: string) {
     const next = new Set(hidden)
@@ -79,6 +95,8 @@
   {instances}
   {hidden}
   {loading}
+  {branding}
+  {instanceColors}
   onview={(v) => (view = v)}
   onnavigate={(d) => (viewDate = d)}
   ontoggleinstance={toggleInstance}
@@ -86,8 +104,9 @@
 
 {#if failed.length > 0}
   <div class="notice" role="status">
-    {failed.map((i) => i.name).join(', ')}
-    {failed.length === 1 ? 'is' : 'are'} unreachable — showing the instances that responded.
+    {t(failed.length === 1 ? 'unreachableOne' : 'unreachableMany', {
+      names: failed.map((i) => i.name).join(', '),
+    })}
   </div>
 {/if}
 {#if error}
@@ -99,24 +118,40 @@
     <MonthGrid
       {viewDate}
       events={visible}
+      {instanceColors}
       onselect={(e) => (modal = { kind: 'event', event: e })}
       onselectday={(date) => (modal = { kind: 'day', date })}
     />
+  {:else if view === 'week'}
+    <WeekGrid
+      {viewDate}
+      events={visible}
+      {instanceColors}
+      onselect={(e) => (modal = { kind: 'event', event: e })}
+    />
   {:else}
-    <AgendaList events={visible} onselect={(e) => (modal = { kind: 'event', event: e })} />
+    <AgendaList
+      events={visible}
+      {instanceColors}
+      onselect={(e) => (modal = { kind: 'event', event: e })}
+    />
   {/if}
 </main>
 
 {#if modal?.kind === 'event'}
   <Modal onclose={() => (modal = null)}>
-    <EventDetail event={modal.event} />
+    <EventDetail event={modal.event} color={instanceColors[modal.event.instance]} />
   </Modal>
 {:else if modal?.kind === 'day'}
   <Modal onclose={() => (modal = null)}>
     <div class="day-list">
       <h2>{dayLabel(modal.date)}</h2>
       {#each dayEvents as e (e.uid)}
-        <EventChip event={e} onselect={() => (modal = { kind: 'event', event: e })} />
+        <EventChip
+          event={e}
+          color={instanceColors[e.instance]}
+          onselect={() => (modal = { kind: 'event', event: e })}
+        />
       {/each}
     </div>
   </Modal>
@@ -128,8 +163,8 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    padding: 0 16px 16px;
-    max-width: 1400px;
+    padding: 0 24px 24px;
+    max-width: 1560px;
     width: 100%;
     margin: 0 auto;
   }
@@ -156,6 +191,11 @@
 
   .day-list h2 {
     font-size: 1.05rem;
+    font-weight: 650;
     margin: 0 0 8px;
+  }
+
+  @media (max-width: 700px) {
+    main { padding: 0 10px 10px; }
   }
 </style>

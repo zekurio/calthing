@@ -1,5 +1,6 @@
 <script lang="ts">
   import { eventDay, monthGrid, sameDay, weekdayLabels, ymd } from '../lib/dates'
+  import { t } from '../lib/i18n.svelte.ts'
   import type { EventDto } from '../../../shared/api.ts'
   import EventChip from './EventChip.svelte'
 
@@ -8,11 +9,13 @@
     events,
     onselect,
     onselectday,
+    instanceColors,
   }: {
     viewDate: Date
     events: EventDto[]
     onselect: (e: EventDto) => void
     onselectday: (d: Date) => void
+    instanceColors: Record<string, string>
   } = $props()
 
   const MAX_CHIPS = 3
@@ -35,7 +38,7 @@
   const today = new Date()
 </script>
 
-<div class="grid" role="grid" aria-label="Month">
+<div class="grid" role="grid" aria-label={t('viewMonth')}>
   {#each weekdayLabels() as label}
     <div class="weekday">{label}</div>
   {/each}
@@ -51,17 +54,17 @@
     >
       <div class="date">
         {#if isToday}
-          <span class="live" aria-label="Today"><span class="dot"></span>{day.getDate()}</span>
+          <span class="live" aria-label={t('today')}><span class="dot"></span>{day.getDate()}</span>
         {:else}
           {day.getDate()}
         {/if}
       </div>
       {#each dayList.slice(0, MAX_CHIPS) as e (e.uid)}
-        <EventChip event={e} compact onselect={() => onselect(e)} />
+        <EventChip event={e} color={instanceColors[e.instance]} compact onselect={() => onselect(e)} />
       {/each}
       {#if dayList.length > MAX_CHIPS}
         <button class="more" onclick={() => onselectday(day)}>
-          +{dayList.length - MAX_CHIPS} more
+          {t('moreCount', { n: dayList.length - MAX_CHIPS })}
         </button>
       {/if}
     </div>
@@ -74,25 +77,28 @@
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     grid-template-rows: auto repeat(6, minmax(96px, 1fr));
-    gap: 4px;
+    gap: 0;
     min-height: 0;
   }
 
   .weekday {
     text-align: center;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.09em;
     color: var(--muted);
-    padding: 4px 0;
+    padding: 8px 0;
+    border-bottom: 2px solid var(--line);
   }
 
   .cell {
     background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 4px;
+    border: 0;
+    border-right: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
+    border-radius: 0;
+    padding: 7px;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -105,12 +111,13 @@
   }
 
   .cell.today {
-    border-color: var(--live);
-    box-shadow: inset 0 2px 0 var(--live);
+    background: color-mix(in srgb, var(--live) 11%, var(--surface));
+    box-shadow: inset 0 0 0 2px var(--live);
   }
 
   .date {
-    font-size: 0.8rem;
+    font-family: var(--font-display);
+    font-size: 0.95rem;
     font-weight: 600;
     color: var(--muted);
     padding: 1px 3px;
@@ -164,7 +171,6 @@
     }
 
     .cell {
-      border-radius: 5px;
       padding: 2px;
     }
   }

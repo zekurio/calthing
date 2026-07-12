@@ -108,6 +108,7 @@ Deno.test('Radarr request and release normalization match the ARR contract', asy
   assertEquals(cinema.end.toISOString(), '2026-07-11T00:00:00.000Z')
   assertEquals(cinema.posterUrl, 'https://images.example/movie-poster.jpg')
   assertEquals(cinema.overview, 'A movie about examples.')
+  assertEquals(cinema.providerIds?.Tmdb, '24680')
 
   const digital = byUid.get('radarr-movies-43-digital@arr-cal-proxy')
   assert(digital !== undefined, 'digital release missing')

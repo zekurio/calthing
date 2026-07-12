@@ -7,8 +7,10 @@ import { createApp, type Logger } from '../src/http/app.ts'
 const config: Config = {
   listen: ':0',
   cache: { ttlMs: 65_500 },
-  calendar: { pastDays: 30, futureDays: 90, name: 'Test Calendar' },
+  calendar: { pastDays: 30, futureDays: 90, name: 'Test Calendar', availabilityDelayMs: 0 },
   auth: { token: '' },
+  branding: { name: 'Jellyfin', iconUrl: '', pageTitle: '', description: '' },
+  jellyfin: { url: '', publicUrl: '', apiKey: '' },
   instances: [{
     name: 'tv',
     type: 'sonarr',

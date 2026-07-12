@@ -1,4 +1,5 @@
 import type { EventDto } from '../../../shared/api.ts'
+import { i18n, LOCALE_TAGS, type Locale } from './i18n.svelte.ts'
 
 export function addDays(d: Date, n: number): Date {
   const out = new Date(d)
@@ -12,6 +13,12 @@ export function addMonths(d: Date, n: number): Date {
 
 export function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+
+/** Monday-first start of the week containing `d`, as a local midnight Date. */
+export function startOfWeek(d: Date): Date {
+  const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  return addDays(midnight, -((midnight.getDay() + 6) % 7))
 }
 
 export function sameDay(a: Date, b: Date): boolean {
@@ -53,30 +60,53 @@ export function eventDay(e: EventDto): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
-const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
-const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
-const dayFmt = new Intl.DateTimeFormat(undefined, {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-})
+interface Formatters {
+  time: Intl.DateTimeFormat
+  month: Intl.DateTimeFormat
+  weekday: Intl.DateTimeFormat
+  day: Intl.DateTimeFormat
+  weekRange: Intl.DateTimeFormat
+}
+
+const formatterCache: Partial<Record<Locale, Formatters>> = {}
+
+function formatters(): Formatters {
+  const locale = i18n.locale
+  let cached = formatterCache[locale]
+  if (!cached) {
+    const tag = LOCALE_TAGS[locale]
+    cached = {
+      time: new Intl.DateTimeFormat(tag, { hour: '2-digit', minute: '2-digit' }),
+      month: new Intl.DateTimeFormat(tag, { month: 'long', year: 'numeric' }),
+      weekday: new Intl.DateTimeFormat(tag, { weekday: 'short' }),
+      day: new Intl.DateTimeFormat(tag, { weekday: 'long', day: 'numeric', month: 'long' }),
+      weekRange: new Intl.DateTimeFormat(tag, { day: 'numeric', month: 'long', year: 'numeric' }),
+    }
+    formatterCache[locale] = cached
+  }
+  return cached
+}
 
 export function formatTime(iso: string): string {
-  return timeFmt.format(new Date(iso))
+  return formatters().time.format(new Date(iso))
 }
 
 export function monthLabel(d: Date): string {
-  return monthFmt.format(d)
+  return formatters().month.format(d)
+}
+
+/** Range label for the week starting at `start`, e.g. "6.–12. Juli 2026". */
+export function weekLabel(start: Date): string {
+  return formatters().weekRange.formatRange(start, addDays(start, 6))
 }
 
 export function weekdayLabels(): string[] {
   // Mon 2026-07-06 .. Sun 2026-07-12, purely for localized labels.
-  return Array.from({ length: 7 }, (_, i) => weekdayFmt.format(new Date(2026, 6, 6 + i)))
+  return Array.from({ length: 7 }, (_, i) => formatters().weekday.format(new Date(2026, 6, 6 + i)))
 }
 
 export function dayLabel(d: Date): string {
-  return dayFmt.format(d)
+  return formatters().day.format(d)
 }
 
 export function sxxeyy(season: number, episode: number): string {

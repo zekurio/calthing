@@ -21,6 +21,14 @@ export interface EventDto {
   downloaded: boolean
   overview: string
   posterUrl: string
+  jellyfinUrl: string
+}
+
+export interface BrandingDto {
+  name: string
+  iconUrl: string
+  pageTitle: string
+  description: string
 }
 
 export interface InstanceStatusDto {
@@ -34,6 +42,7 @@ export interface InstanceStatusDto {
 export interface EventsResponse {
   events: EventDto[]
   instances: InstanceStatusDto[]
+  branding: BrandingDto
 }
 
 export interface HealthResponse {

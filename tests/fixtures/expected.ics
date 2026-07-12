@@ -15,13 +15,12 @@ DESCRIPTION:Things begin\, dramatically.\nWith a newline\, a comma\, and
   a\; semicolon.
 CATEGORIES:tv
 DTSTART:20260715T200000Z
-DTEND:20260715T204500Z
 END:VEVENT
 BEGIN:VEVENT
 UID:radarr-movies-42-digital@arr-cal-proxy
 DTSTAMP:20260711T120000Z
 LAST-MODIFIED:20260711T120000Z
-SUMMARY:✔ Example Movie (Digital Release)
+SUMMARY:✔ Example Movie (Digitalstart)
 DESCRIPTION:A movie about examples.
 CATEGORIES:movies
 DTSTART;VALUE=DATE:20260720

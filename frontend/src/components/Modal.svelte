@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import { t } from '../lib/i18n.svelte.ts'
 
   let { onclose, children }: { onclose: () => void; children: Snippet } = $props()
 
@@ -18,7 +19,7 @@
   role="presentation"
 >
   <div class="dialog" role="dialog" aria-modal="true" tabindex="-1">
-    <button class="close" onclick={onclose} aria-label="Close">✕</button>
+    <button class="close" onclick={onclose} aria-label={t('close')}>✕</button>
     {@render children()}
   </div>
 </div>

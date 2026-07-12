@@ -5,6 +5,7 @@ import { type ArrImage, calendarQuery, getJson, type HttpFetch, posterUrl } from
 interface RadarrMovie {
   id: number
   title: string
+  tmdbId?: number
   inCinemas?: string
   digitalRelease?: string
   physicalRelease?: string
@@ -61,6 +62,8 @@ export async function fetchRadarr(
         downloaded: movie.hasFile ?? false,
         overview: movie.overview ?? '',
         posterUrl: posterUrl(movie.images),
+        providerIds: movie.tmdbId ? { Tmdb: String(movie.tmdbId) } : {},
+        jellyfinUrl: '',
       })
     }
   }

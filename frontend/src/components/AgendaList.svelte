@@ -1,15 +1,17 @@
 <script lang="ts">
   import { dayLabel, eventDay, formatTime, sxxeyy, ymd } from '../lib/dates'
   import type { EventDto } from '../../../shared/api.ts'
-  import { KIND_LABELS } from '../lib/api'
+  import { kindLabel, t } from '../lib/i18n.svelte.ts'
   import Poster from './Poster.svelte'
 
   let {
     events,
     onselect,
+    instanceColors,
   }: {
     events: EventDto[]
     onselect: (e: EventDto) => void
+    instanceColors: Record<string, string>
   } = $props()
 
   const groups = $derived.by(() => {
@@ -30,8 +32,8 @@
 
 {#if groups.length === 0}
   <div class="empty">
-    <p>Nothing scheduled in the next 90 days.</p>
-    <p class="hint">Releases and air dates from your instances show up here as they're announced.</p>
+    <p>{t('emptyAgenda')}</p>
+    <p class="hint">{t('emptyAgendaHint')}</p>
   </div>
 {/if}
 
@@ -40,7 +42,11 @@
     <section>
       <h2>{dayLabel(group.date)}</h2>
       {#each group.events as e (e.uid)}
-        <button class="row {e.source}" onclick={() => onselect(e)}>
+        <button
+          class="row"
+          style:--instance-color={instanceColors[e.instance] ?? (e.source === 'radarr' ? 'var(--radarr)' : 'var(--sonarr)')}
+          onclick={() => onselect(e)}
+        >
           <Poster url={e.posterUrl} source={e.source} />
 
           <div class="info">
@@ -50,7 +56,7 @@
                 <span class="mono">{sxxeyy(e.season, e.episode)}</span>
                 {#if e.subtitle}· {e.subtitle}{/if}
               {:else}
-                {KIND_LABELS[e.kind]}
+                {kindLabel(e.kind)}
               {/if}
             </span>
           </div>
@@ -59,7 +65,7 @@
               <span class="mono time">{formatTime(e.start)}</span>
             {/if}
             {#if e.downloaded}
-              <span class="check" title="Downloaded">✓</span>
+              <span class="check" title={t('available')}>✓</span>
             {/if}
           </div>
         </button>
@@ -107,16 +113,8 @@
     border-radius: 10px;
     background: var(--surface);
     border: 1px solid var(--line);
-    border-left: 3px solid;
+    border-left: 3px solid var(--instance-color);
     text-align: left;
-  }
-
-  .row.sonarr {
-    border-left-color: var(--sonarr);
-  }
-
-  .row.radarr {
-    border-left-color: var(--radarr);
   }
 
   .row:hover {
