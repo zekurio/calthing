@@ -2,7 +2,7 @@
 # Copy to config.yaml and adjust. ${VAR} references are expanded from the
 # environment at load time; loading fails if a referenced variable is unset.
 
-listen: ":8080"
+listen: ':8080'
 
 cache:
   # How long upstream calendar responses are reused before re-fetching.
@@ -13,11 +13,11 @@ calendar:
   past_days: 30
   future_days: 90
   # X-WR-CALNAME shown by calendar clients.
-  name: "Media Calendar"
+  name: 'Media Calendar'
 
 auth:
   # If set, /calendar.ics requires ?token=<value>. Leave empty to disable.
-  token: ""
+  token: ''
 
 instances:
   - name: movies # unique; part of event UIDs — treat as stable, renaming re-creates events in subscribed calendars

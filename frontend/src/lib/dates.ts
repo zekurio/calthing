@@ -1,4 +1,4 @@
-import type { ArrEvent } from './types'
+import type { EventDto } from '../../../shared/api.ts'
 
 export function addDays(d: Date, n: number): Date {
   const out = new Date(d)
@@ -45,7 +45,7 @@ export function monthGrid(viewDate: Date): Date[] {
  * parts verbatim. Timed events (episode air times) are instants: use the
  * viewer's local date.
  */
-export function eventDay(e: ArrEvent): Date {
+export function eventDay(e: EventDto): Date {
   const d = new Date(e.start)
   if (e.allDay) {
     return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())

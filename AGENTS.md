@@ -2,59 +2,63 @@
 
 ## Project Structure & Module Organization
 
-The Go service starts in `cmd/arr-cal-proxy/main.go`. Keep application logic in
-packages under `internal/`: `arr` calls Radarr/Sonarr, `fetch` manages
-upstream retrieval and caching, `ical` renders feeds, `config` parses YAML, and
-`server` owns HTTP handlers. Shared event types live in `internal/event`.
+The Deno service starts in `src/main.ts`. Keep application logic under `src/`: `upstream` calls
+Radarr/Sonarr, `services` owns fetching, caching, and iCalendar rendering, `config.ts` parses YAML,
+`domain` defines normalized events, and `http` owns the Elysia application and static-file handling.
+Browser-safe API DTOs live in `shared/api.ts`; keep that module free of Deno and server-runtime
+imports.
 
-The Svelte frontend is in `frontend/src/`; reusable UI belongs in
-`frontend/src/components/`, while API, date, and type helpers belong in
-`frontend/src/lib/`. `frontend/embed.go` embeds the production `dist/` output.
-Put Go fixture files beside their package in `testdata/`. Use
-`config.example.yaml` as the configuration template. Nix
-packaging and the NixOS module are in `nix/`.
+The Svelte frontend is in `frontend/src/`; reusable UI belongs in `frontend/src/components/`, while
+client, date, and query helpers belong in `frontend/src/lib/`. The Eden client imports the Elysia
+`App` type only; never bundle server values into the frontend. Backend tests live in `tests/`, with
+static fixtures under `tests/fixtures/`. Use `config.example.yaml` as the configuration template.
+Nix packaging and the NixOS module are in `nix/`.
 
 ## Build, Test, and Development Commands
 
-- `devenv up` starts the Go API on `:8080` and Vite on `:5173`; Vite proxies API
-  and calendar requests to the backend.
-- `go test ./...` runs all Go unit and handler tests.
-- `cd frontend && pnpm check` runs Svelte and TypeScript checks.
-- `cd frontend && pnpm build` creates the embedded frontend.
-- `go run ./cmd/arr-cal-proxy -config config.yaml` runs a production-style local
-  server after the frontend build.
+- `devenv up` starts the Deno API on `:8080` and Vite on `:5173`; Vite proxies API and calendar
+  requests to the backend.
+- `deno task test` runs backend unit and handler tests.
+- `deno task check` type-checks backend and shared contracts, then runs Svelte and TypeScript
+  checks.
+- `deno task frontend:build` creates the production frontend.
+- `deno task start -config config.yaml` runs a production-style local server after the frontend
+  build.
 - `nix build` verifies the reproducible package build.
 
-Regenerate the iCal golden fixture only for intentional rendering changes:
-`go test ./internal/ical/ -update -run TestGenerateGolden`.
+The iCalendar golden fixture is `tests/fixtures/expected.ics`. Update it only for intentional
+rendering changes, then run `deno test --allow-read tests/ical.test.ts`.
 
 ## Coding Style & Naming Conventions
 
-Format Go with `gofmt`; use idiomatic package names and exported `PascalCase`
-identifiers. Keep errors contextual (`fmt.Errorf("parse config: %w", err)`).
-Follow the existing frontend style: TypeScript with single quotes, no
-semicolons, and two-space indentation in `.ts` and `.svelte` files. Name
-components in `PascalCase` (for example, `EventChip.svelte`) and helpers in
-lower camel case.
+Use TypeScript with single quotes, no semicolons, and two-space indentation in `.ts` and `.svelte`
+files. Keep Deno and browser boundaries explicit, prefer Web `Request`, `Response`, and
+`AbortSignal`, and keep errors contextual. Name components in `PascalCase` (for example,
+`EventChip.svelte`) and helpers in lower camel case. Format backend code with `deno fmt`.
 
 ## Testing Guidelines
 
-Add `*_test.go` tests in the package being changed. Name tests
-`TestBehavior` and use table-driven cases where several inputs share an
-expectation. Exercise endpoint status, response content, and invalid input;
-use static fixtures rather than live ARR services. Run both `go test ./...` and
-`pnpm check` for changes that affect the web experience.
+Add `*.test.ts` tests under `tests/` for backend changes. Use table-driven cases where several
+inputs share an expectation. Exercise endpoint status, response content, invalid input,
+cancellation, cache boundaries, and partial upstream failures. Use static fixtures rather than live
+ARR services. Run both `deno task test` and `deno task check` for changes that affect the web
+experience.
 
 ## Commit & Pull Request Guidelines
 
-This repository has no commits yet, so no established commit convention can be
-inferred. Use concise, imperative subjects such as `Add Radarr retry handling`.
-Keep commits scoped. Pull requests should explain the user-visible effect,
-describe configuration or API changes, link relevant issues, and include UI
-screenshots when frontend behavior changes.
+Use conventional commit-style messages and pull request titles: `type(scope): summary`.
+
+Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes are optional; use the
+affected area when helpful, for example `frontend`, `server`, `config`, or `nix`.
+
+Examples: `fix(frontend): preserve calendar view`, `docs: update configuration guide`,
+`chore(nix): refresh dependency hashes`.
+
+Keep commits scoped. Pull requests should explain the user-visible effect, describe configuration or
+API changes, link relevant issues, and include UI screenshots when frontend behavior changes.
 
 ## Security & Configuration
 
-Never commit `config.yaml`, API keys, or tokens. Use `${VAR}` references in
-configuration and document settings in `config.example.yaml` and the
-README. Treat instance names as stable because they form calendar event UIDs.
+Never commit `config.yaml`, API keys, or tokens. Use `${VAR}` references in configuration and
+document settings in `config.example.yaml` and the README. Treat instance names as stable because
+they form calendar event UIDs.

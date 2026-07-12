@@ -1,17 +1,19 @@
 # arr-cal-proxy
 
-One calendar for your whole \*arr stack. arr-cal-proxy queries the calendar
-APIs of any number of Radarr and Sonarr instances and serves:
+One calendar for your whole \*arr stack. arr-cal-proxy queries the calendar APIs of any number of
+Radarr and Sonarr instances and serves:
 
-- **`/calendar.ics`** — a single merged iCal feed you can subscribe to from
-  Google Calendar, Apple Calendar, or anything else that speaks iCal.
-- **A web calendar** — a month grid and agenda view with posters, episode
-  numbers, release-type badges (cinema / digital / physical), and
-  downloaded-status, embedded in the binary.
+- **`/calendar.ics`** — a single merged iCal feed you can subscribe to from Google Calendar, Apple
+  Calendar, or anything else that speaks iCal.
+- **A web calendar** — a month grid and agenda view with posters, episode numbers, release-type
+  badges (cinema / digital / physical), and downloaded status, served by the same process.
 
-Episodes appear as timed events at their air time; movie releases appear as
-all-day events, one per release date. Event UIDs are stable, so subscribed
-calendars update in place instead of duplicating on refresh.
+The backend runs on Deno with Elysia. The Svelte frontend uses Eden Treaty for end-to-end typed API
+calls and TanStack Svelte Query for cancellation, caching, and request-state management.
+
+Episodes appear as timed events at their air time; movie releases appear as all-day events, one per
+release date. Event UIDs are stable, so subscribed calendars update in place instead of duplicating
+on refresh.
 
 ## Running
 
@@ -19,26 +21,33 @@ calendars update in place instead of duplicating on refresh.
 arr-cal-proxy -config config.yaml
 ```
 
+For a local source run, build the frontend first and start Deno:
+
+```sh
+deno task frontend:build
+deno task start -config config.yaml
+```
+
 ## Configuration
 
 Copy [`config.example.yaml`](config.example.yaml) and adjust:
 
 ```yaml
-listen: ":8080"
+listen: ':8080'
 
 cache:
-  ttl: 10m               # reuse upstream responses this long
+  ttl: 10m # reuse upstream responses this long
 
 calendar:
-  past_days: 30          # default window: today-30d .. today+90d
+  past_days: 30 # default window: today-30d .. today+90d
   future_days: 90
-  name: "Media Calendar" # calendar name shown by clients
+  name: 'Media Calendar' # calendar name shown by clients
 
 auth:
-  token: ""              # if set, /calendar.ics requires ?token=<value>
+  token: '' # if set, /calendar.ics requires ?token=<value>
 
 instances:
-  - name: movies         # unique, stable — part of event UIDs
+  - name: movies # unique, stable — part of event UIDs
     type: radarr
     url: http://127.0.0.1:7878
     api_key: ${RADARR_API_KEY}
@@ -49,37 +58,40 @@ instances:
     api_key: ${SONARR_API_KEY}
 ```
 
-`${VAR}` references are expanded from the environment at startup and fail
-loudly when unset — pair them with a systemd `EnvironmentFile` for secrets.
-`ARR_CAL_PROXY_LISTEN`, `ARR_CAL_PROXY_TOKEN`, and `ARR_CAL_PROXY_CONFIG`
-override their config counterparts.
+`${VAR}` references are expanded from the environment at startup and fail loudly when unset — pair
+them with a systemd `EnvironmentFile` for secrets. `ARR_CAL_PROXY_LISTEN`, `ARR_CAL_PROXY_TOKEN`,
+and `ARR_CAL_PROXY_CONFIG` override their config counterparts. `ARR_CAL_PROXY_STATIC_DIR` can
+override the frontend asset directory; packaged installations set it automatically.
 
-**Auth model:** the optional token guards only `/calendar.ics` (calendar
-clients can't send headers, so it rides along as a query parameter). The web
-UI and `/api/*` are unauthenticated — put them behind your reverse proxy's
-auth if they shouldn't be reachable. Renaming an instance changes its event
-UIDs, which re-creates those events in subscribed calendars; treat instance
-names as stable.
+**Auth model:** the optional token guards only `/calendar.ics` (calendar clients cannot send
+headers, so it rides along as a query parameter). The web UI and `/api/*` are unauthenticated — put
+them behind your reverse proxy's auth if they should not be reachable. Renaming an instance changes
+its event UIDs, which re-creates those events in subscribed calendars; treat instance names as
+stable.
 
 ## Endpoints
 
-| Route | Description |
-| --- | --- |
-| `GET /calendar.ics` | Merged iCal feed. Optional `?start=YYYY-MM-DD&end=YYYY-MM-DD`, `?token=` |
-| `GET /api/events` | JSON events + per-instance status, same `start`/`end` params |
-| `GET /api/health` | Liveness probe |
-| `GET /` | Web calendar |
+| Route               | Description                                                                 |
+| ------------------- | --------------------------------------------------------------------------- |
+| `GET /calendar.ics` | Merged iCal feed. Optional `?start=YYYY-MM-DD&end=YYYY-MM-DD`, `?token=`    |
+| `GET /api/events`   | JSON events and per-instance status, with the same `start`/`end` parameters |
+| `GET /api/health`   | Liveness probe                                                              |
+| `GET /`             | Web calendar                                                                |
 
-One instance being down never kills the feed: its error is reported in
-`/api/events` (and shown in the UI) while the remaining instances serve.
+One instance being down never kills the feed: its error is reported in `/api/events` and shown in
+the UI while the remaining instances serve.
 
 ## Nix
 
 Build and run directly:
 
 ```sh
-nix build   # or: nix run . -- -config config.yaml
+nix build
+nix run . -- -config config.yaml
 ```
+
+The package builds the Vite frontend separately, installs the Deno source and locked dependencies
+into the Nix store, and exposes the same `arr-cal-proxy -config ...` executable contract.
 
 NixOS module:
 
@@ -108,28 +120,36 @@ NixOS module:
 }
 ```
 
-### Updating dependency hashes
+### Updating dependencies
 
-[`nix/package.nix`](nix/package.nix) pins two fixed-output hashes. When
-`frontend/pnpm-lock.yaml` changes, update `pnpmDepsHash`; when `go.mod`
-changes, update `vendorHash`: set the stale hash to `lib.fakeHash`, run
-`nix build`, and copy the `got:` hash from the error message.
-`pnpm-lock.yaml` must stay committed — `fetchPnpmDeps` requires it.
+Dependencies are pinned by `deno.json`, `deno.lock`, and the checked-in `vendor/` tree. Run
+`deno install --frozen=false` after changing dependency versions, then commit the updated lockfile
+and vendor tree.
+
+Nix stores the target-specific Deno `node_modules` hashes in `denoDepsHashes` in
+[`nix/package.nix`](nix/package.nix). Update each hash on its corresponding system by temporarily
+replacing it with `lib.fakeHash`, running `nix build`, and copying the reported `got:` hash.
 
 ## Development
 
-The repo ships a [devenv](https://devenv.sh) + direnv setup: `direnv allow`
-gives you Go, Node, and the language servers.
+The repository ships a [devenv](https://devenv.sh) and direnv setup. After `direnv allow`:
 
 ```sh
-devenv up        # runs the Go backend (:8080) and Vite dev server (:5173)
-go test ./...    # backend tests
-cd frontend && pnpm check   # svelte-check
+devenv up                         # Deno API :8080 and Vite :5173
+deno task test                    # backend tests
+deno task check                   # backend and frontend checks
+deno task frontend:build          # production frontend
+nix build                         # reproducible Deno-only package
 ```
 
-The Vite dev server proxies `/api` and `/calendar.ics` to the Go backend.
-For a production-style run, `cd frontend && pnpm build`, then
-`go run ./cmd/arr-cal-proxy` — the built SPA is embedded via `go:embed`.
+The Vite development server proxies `/api` and `/calendar.ics` to the Deno backend.
+`src/http/app.ts` is the Elysia API contract imported type-only by the Eden client; `shared/api.ts`
+contains browser-safe DTOs. TanStack Query keys event requests by date window and passes its
+`AbortSignal` through Eden.
 
-The iCal golden test regenerates with
-`go test ./internal/ical/ -update -run TestGenerateGolden`.
+The iCalendar serializer is covered by the byte-for-byte golden fixture at
+`tests/fixtures/expected.ics`. Change that fixture only for intentional rendering changes, then run:
+
+```sh
+deno test --allow-read tests/ical.test.ts
+```

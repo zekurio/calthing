@@ -1,4 +1,4 @@
-{ pkgs, lib, ... }:
+{ lib, ... }:
 
 {
   imports = lib.optional (builtins.pathExists ./devenv.local.nix) ./devenv.local.nix;
@@ -7,25 +7,12 @@
   # configured substituters are still used for actual builds.
   cachix.enable = false;
 
-  languages.go.enable = true;
-
-  # Node/pnpm come from the same nixpkgs channel nix/package.nix builds with
-  # (pinned in devenv.yaml), so dev and packaging stay aligned by construction.
-  languages.javascript = {
-    enable = true;
-    pnpm.enable = true;
-  };
-
-  packages = with pkgs; [
-    gopls
-    gotools
-    typescript-language-server
-  ];
+  languages.deno.enable = true;
 
   # `devenv up` runs both dev servers; Vite proxies /api and /calendar.ics
-  # to the Go backend.
+  # to the Deno backend.
   processes = {
-    backend.exec = "go run ./cmd/arr-cal-proxy -config config.yaml";
-    frontend.exec = "cd frontend && pnpm dev";
+    backend.exec = "deno task dev -config config.yaml";
+    frontend.exec = "deno task frontend:dev";
   };
 }

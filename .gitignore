@@ -5,10 +5,9 @@
 devenv.local.nix
 .pre-commit-config.yaml
 
-# frontend
-frontend/node_modules/
+# Deno-managed npm dependencies and frontend output
+node_modules/
 frontend/dist/*
-!frontend/dist/.gitkeep
 
 # local config & secrets
 config.yaml

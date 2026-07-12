@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { createQuery } from '@tanstack/svelte-query'
+  import type { EventDto } from '../../shared/api.ts'
   import { fetchEvents } from './lib/api'
-  import { addDays, eventDay, monthGrid, sameDay, startOfMonth, dayLabel } from './lib/dates'
-  import type { ArrEvent, InstanceStatus } from './lib/types'
+  import { addDays, dayLabel, eventDay, monthGrid, sameDay, startOfMonth, ymd } from './lib/dates'
   import Header from './components/Header.svelte'
   import MonthGrid from './components/MonthGrid.svelte'
   import AgendaList from './components/AgendaList.svelte'
@@ -10,7 +11,7 @@
   import Modal from './components/Modal.svelte'
 
   type View = 'month' | 'agenda'
-  type ModalState = { kind: 'event'; event: ArrEvent } | { kind: 'day'; date: Date } | null
+  type ModalState = { kind: 'event'; event: EventDto } | { kind: 'day'; date: Date } | null
 
   const initialView = (): View => {
     const fromURL = new URLSearchParams(location.search).get('view')
@@ -20,10 +21,6 @@
   let view = $state<View>(initialView())
   let viewDate = $state(startOfMonth(new Date()))
   let hidden = $state(new Set<string>(JSON.parse(localStorage.getItem('hiddenInstances') ?? '[]')))
-  let events = $state<ArrEvent[]>([])
-  let instances = $state<InstanceStatus[]>([])
-  let loading = $state(true)
-  let error = $state('')
   let modal = $state<ModalState>(null)
 
   $effect(() => {
@@ -31,32 +28,32 @@
     localStorage.setItem('hiddenInstances', JSON.stringify([...hidden]))
   })
 
-  $effect(() => {
-    let start: Date
-    let end: Date
+  const range = $derived.by(() => {
     if (view === 'month') {
       const cells = monthGrid(viewDate)
-      start = cells[0]
-      end = addDays(cells[41], 1)
-    } else {
-      start = new Date()
-      end = addDays(start, 90)
+      return {
+        start: ymd(cells[0]),
+        end: ymd(addDays(cells[41], 1)),
+      }
     }
-    loading = true
-    error = ''
-    fetchEvents(start, end)
-      .then((resp) => {
-        events = resp.events
-        instances = resp.instances
-      })
-      .catch((e: Error) => {
-        error = e.message
-      })
-      .finally(() => {
-        loading = false
-      })
+
+    const start = new Date()
+    return {
+      start: ymd(start),
+      end: ymd(addDays(start, 90)),
+    }
   })
 
+  const eventsQuery = createQuery(() => ({
+    queryKey: ['events', range.start, range.end] as const,
+    queryFn: ({ queryKey: [, start, end], signal }) => fetchEvents(start, end, signal),
+    placeholderData: (previous) => previous,
+  }))
+
+  const events = $derived(eventsQuery.data?.events ?? [])
+  const instances = $derived(eventsQuery.data?.instances ?? [])
+  const loading = $derived(eventsQuery.isFetching)
+  const error = $derived(eventsQuery.error?.message ?? '')
   const visible = $derived(events.filter((e) => !hidden.has(e.instance)))
   const failed = $derived(instances.filter((i) => !i.ok))
   const dayEvents = $derived.by(() => {

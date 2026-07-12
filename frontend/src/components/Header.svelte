@@ -1,6 +1,6 @@
 <script lang="ts">
   import { addMonths, monthLabel, startOfMonth } from '../lib/dates'
-  import type { InstanceStatus } from '../lib/types'
+  import type { InstanceStatusDto } from '../../../shared/api.ts'
 
   let {
     view,
@@ -14,7 +14,7 @@
   }: {
     view: 'month' | 'agenda'
     viewDate: Date
-    instances: InstanceStatus[]
+    instances: InstanceStatusDto[]
     hidden: Set<string>
     loading: boolean
     onview: (v: 'month' | 'agenda') => void

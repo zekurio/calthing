@@ -1,6 +1,6 @@
 <script lang="ts">
   import { eventDay, monthGrid, sameDay, weekdayLabels, ymd } from '../lib/dates'
-  import type { ArrEvent } from '../lib/types'
+  import type { EventDto } from '../../../shared/api.ts'
   import EventChip from './EventChip.svelte'
 
   let {
@@ -10,8 +10,8 @@
     onselectday,
   }: {
     viewDate: Date
-    events: ArrEvent[]
-    onselect: (e: ArrEvent) => void
+    events: EventDto[]
+    onselect: (e: EventDto) => void
     onselectday: (d: Date) => void
   } = $props()
 
@@ -19,7 +19,7 @@
 
   const cells = $derived(monthGrid(viewDate))
   const byDay = $derived.by(() => {
-    const map = new Map<string, ArrEvent[]>()
+    const map = new Map<string, EventDto[]>()
     for (const e of events) {
       const key = ymd(eventDay(e))
       const list = map.get(key)

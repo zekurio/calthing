@@ -68,13 +68,14 @@ in
       serviceConfig = {
         ExecStart = "${lib.getExe cfg.package} -config ${configFile}";
         EnvironmentFile = lib.optional (cfg.environmentFile != null) cfg.environmentFile;
+        Environment = "DENO_DIR=%C/arr-cal-proxy";
+        CacheDirectory = "arr-cal-proxy";
         Restart = "on-failure";
         DynamicUser = true;
 
         # Hardening
         CapabilityBoundingSet = "";
         LockPersonality = true;
-        MemoryDenyWriteExecute = true;
         NoNewPrivileges = true;
         PrivateDevices = true;
         PrivateTmp = true;

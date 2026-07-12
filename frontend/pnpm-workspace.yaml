@@ -1,3 +1,0 @@
-allowBuilds:
-  # Vite's bundler needs its platform binary installed by this postinstall.
-  esbuild: true

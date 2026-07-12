@@ -1,18 +1,19 @@
 <script lang="ts">
   import { dayLabel, eventDay, formatTime, sxxeyy, ymd } from '../lib/dates'
-  import { KIND_LABELS, type ArrEvent } from '../lib/types'
+  import type { EventDto } from '../../../shared/api.ts'
+  import { KIND_LABELS } from '../lib/api'
   import Poster from './Poster.svelte'
 
   let {
     events,
     onselect,
   }: {
-    events: ArrEvent[]
-    onselect: (e: ArrEvent) => void
+    events: EventDto[]
+    onselect: (e: EventDto) => void
   } = $props()
 
   const groups = $derived.by(() => {
-    const map = new Map<string, { date: Date; events: ArrEvent[] }>()
+    const map = new Map<string, { date: Date; events: EventDto[] }>()
     for (const e of events) {
       const day = eventDay(e)
       const key = ymd(day)

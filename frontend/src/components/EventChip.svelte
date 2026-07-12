@@ -1,13 +1,13 @@
 <script lang="ts">
   import { formatTime, sxxeyy } from '../lib/dates'
-  import type { ArrEvent } from '../lib/types'
+  import type { EventDto } from '../../../shared/api.ts'
 
   let {
     event,
     compact = false,
     onselect,
   }: {
-    event: ArrEvent
+    event: EventDto
     compact?: boolean
     onselect: () => void
   } = $props()

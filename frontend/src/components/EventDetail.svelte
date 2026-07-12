@@ -1,9 +1,10 @@
 <script lang="ts">
   import { dayLabel, eventDay, formatTime, sxxeyy } from '../lib/dates'
-  import { KIND_LABELS, type ArrEvent } from '../lib/types'
+  import type { EventDto } from '../../../shared/api.ts'
+  import { KIND_LABELS } from '../lib/api'
   import Poster from './Poster.svelte'
 
-  let { event }: { event: ArrEvent } = $props()
+  let { event }: { event: EventDto } = $props()
 </script>
 
 <article class={event.source}>
