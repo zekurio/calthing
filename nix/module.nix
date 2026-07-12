@@ -100,6 +100,11 @@ in
         SystemCallFilter = [
           "@system-service"
           "~@privileged"
+          # Deno/V8 uses memory protection keys during startup. These are part
+          # of systemd's @privileged group, so allow them back explicitly.
+          "pkey_alloc"
+          "pkey_free"
+          "pkey_mprotect"
         ];
       };
     };
