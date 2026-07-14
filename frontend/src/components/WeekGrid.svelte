@@ -72,13 +72,13 @@
     min-width: 0;
     min-height: 320px;
     background: var(--surface);
-    border-right: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
   }
 
   .day.today {
-    background: color-mix(in srgb, var(--live) 8%, var(--surface));
-    box-shadow: inset 0 2px 0 var(--live);
+    background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+    box-shadow: inset 0 2px 0 var(--accent);
   }
 
   header {
@@ -87,7 +87,7 @@
     justify-content: space-between;
     gap: 6px;
     padding: 8px 9px 6px;
-    border-bottom: 2px solid var(--line);
+    border-bottom: 1px solid var(--line);
   }
 
   .wd {
@@ -116,7 +116,7 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--live);
+    background: var(--gradient);
   }
 
   .list {

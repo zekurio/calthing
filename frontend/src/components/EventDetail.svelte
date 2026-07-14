@@ -123,16 +123,17 @@
   .watch {
     align-self: flex-start;
     margin-top: 4px;
-    padding: 7px 12px;
-    border: 2px solid var(--line);
-    border-radius: 4px 10px 4px 9px;
-    background: var(--sonarr);
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: var(--gradient);
     color: var(--on-accent);
-    font-weight: 700;
+    font-weight: 600;
     text-decoration: none;
   }
 
-  .watch:hover { box-shadow: 3px 3px 0 var(--line); transform: translate(-1px, -1px); }
+  .watch:hover {
+    filter: brightness(1.08);
+  }
 
   @media (max-width: 540px) {
     article {

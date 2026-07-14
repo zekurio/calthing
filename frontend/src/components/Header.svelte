@@ -187,18 +187,7 @@
     width: 100%;
     margin: 0 auto;
     position: relative;
-    border-bottom: 2px solid var(--line);
-  }
-
-  header::after {
-    content: '';
-    position: absolute;
-    left: 24px;
-    right: 24px;
-    bottom: 4px;
-    height: 5px;
-    background: repeating-linear-gradient(90deg, var(--line) 0 12px, transparent 12px 20px);
-    opacity: 0.14;
+    border-bottom: 1px solid var(--line);
   }
 
   .brand {
@@ -206,8 +195,8 @@
     height: 40px;
     display: grid;
     place-items: center;
-    background: var(--line);
-    color: var(--surface);
+    background: var(--gradient);
+    color: var(--on-accent);
     border-radius: 10px;
     overflow: hidden;
   }
@@ -274,7 +263,7 @@
   }
 
   .nav-group button + button {
-    border-left: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
+    border-left: 1px solid var(--line);
   }
 
   .nav-group button:hover {
@@ -314,7 +303,7 @@
   }
 
   .view-toggle button + button {
-    border-left: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
+    border-left: 1px solid var(--line);
   }
 
   .view-toggle button.active {
@@ -373,7 +362,7 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--surface);
-    box-shadow: 4px 5px 0 color-mix(in srgb, var(--line) 18%, transparent);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.16);
   }
 
   .settings-menu section {
@@ -417,7 +406,7 @@
   .source-row .dot {
     width: 8px;
     height: 8px;
-    border-radius: 3px;
+    border-radius: 50%;
     background: var(--instance-color);
     flex-shrink: 0;
   }
@@ -472,7 +461,7 @@
   }
 
   .seg-toggle button + button {
-    border-left: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
+    border-left: 1px solid var(--line);
   }
 
   .seg-toggle button.active {
@@ -487,13 +476,13 @@
     gap: 10px;
     padding: 8px 10px;
     border-radius: 8px;
-    border: 1px dashed color-mix(in srgb, var(--line) 55%, transparent);
+    border: 1px solid var(--line);
     background: var(--surface-2);
     text-align: left;
   }
 
   .subscribe:hover {
-    border-color: var(--line);
+    border-color: var(--muted);
   }
 
   .subscribe.copied {
@@ -542,11 +531,6 @@
   @media (max-width: 800px) {
     header {
       padding: 12px 12px 18px;
-    }
-
-    header::after {
-      left: 12px;
-      right: 12px;
     }
 
     .spacer {

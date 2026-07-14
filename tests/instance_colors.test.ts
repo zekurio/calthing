@@ -18,8 +18,8 @@ Deno.test('instance colors preserve primary ARR colors and distinguish later ins
     status('Anime', 'sonarr'),
   ])
 
-  assertEquals(colors.Movies, '#ed7c43')
-  assertEquals(colors.Series, '#168dad')
+  assertEquals(colors.Movies, '#9a4fb5')
+  assertEquals(colors.Series, '#0090c4')
   assertNotEquals(colors['Anime Movies'], colors.Movies)
   assertNotEquals(colors.Anime, colors.Series)
 })

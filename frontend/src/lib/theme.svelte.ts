@@ -11,7 +11,7 @@ export const theme: { mode: ThemeMode } = $state({
 })
 
 /** Address-bar / PWA chrome color per resolved theme; keep in sync with --bg in app.css. */
-const THEME_COLORS = { light: '#e7e4f2', dark: '#1c1728' }
+const THEME_COLORS = { light: '#f6f6f8', dark: '#0f0f13' }
 
 function apply(): void {
   const resolved = theme.mode === 'system' ? (media.matches ? 'dark' : 'light') : theme.mode

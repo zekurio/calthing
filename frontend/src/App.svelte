@@ -174,7 +174,7 @@
     width: 100%;
     margin: 0 auto 8px;
     padding: 8px 16px;
-    color: var(--radarr);
+    color: var(--live);
     font-size: 0.9rem;
   }
 

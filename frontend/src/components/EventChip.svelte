@@ -49,16 +49,16 @@
     width: 100%;
     text-align: left;
     padding: 3px 7px 3px 5px;
-    border-radius: 3px 8px 3px 7px;
-    background: color-mix(in srgb, var(--instance-color) 13%, var(--surface));
-    border-left: 4px solid var(--instance-color);
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--instance-color) 9%, var(--surface));
+    border-left: 3px solid var(--instance-color);
     font-size: 0.8rem;
     line-height: 1.3;
     min-width: 0;
   }
 
   .chip:hover {
-    filter: brightness(1.15);
+    background: color-mix(in srgb, var(--instance-color) 18%, var(--surface));
   }
 
   .code {

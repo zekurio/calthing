@@ -89,14 +89,14 @@
     letter-spacing: 0.09em;
     color: var(--muted);
     padding: 8px 0;
-    border-bottom: 2px solid var(--line);
+    border-bottom: 1px solid var(--muted);
   }
 
   .cell {
     background: var(--surface);
     border: 0;
-    border-right: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
     border-radius: 0;
     padding: 7px;
     display: flex;
@@ -111,8 +111,8 @@
   }
 
   .cell.today {
-    background: color-mix(in srgb, var(--live) 11%, var(--surface));
-    box-shadow: inset 0 0 0 2px var(--live);
+    background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+    box-shadow: inset 0 2px 0 var(--accent);
   }
 
   .date {
@@ -137,18 +137,7 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--live);
-    animation: pulse 2.5s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.35;
-    }
+    background: var(--gradient);
   }
 
   .more {

@@ -2,39 +2,50 @@
 @import '@fontsource/barlow-condensed/700.css';
 @import '@fontsource-variable/instrument-sans';
 
+/*
+ * Monochrome base + Jellyfin duotone accent (purple → blue).
+ * Grays carry the interface; --sonarr (blue family) and --radarr (purple
+ * family) are the only chroma, reserved for source identity, and --gradient
+ * marks the three signature moments: brand tile, today, watch button.
+ */
 :root {
-  --bg: #e7e4f2;
-  --surface: #f9f6ed;
-  --surface-2: #eeeaf8;
-  --line: #29213f;
-  --ink: #211a33;
-  --muted: #706985;
-  --sonarr: #168dad;
-  --radarr: #ed7c43;
-  --ok: #2b7b61;
-  --live: #d9475c;
-  --glow: rgb(255 255 255 / 0.55);
+  --bg: #f6f6f8;
+  --surface: #ffffff;
+  --surface-2: #ededf1;
+  --line: #e3e3e9;
+  --ink: #17171d;
+  --muted: #676773;
+  --sonarr: #0090c4;
+  --radarr: #9a4fb5;
+  --accent: #00a4dc;
+  --accent-2: #aa5cc3;
+  --gradient: linear-gradient(135deg, var(--accent-2), var(--accent));
+  --ok: #1e8a5e;
+  --live: #d23f4e;
   --on-accent: #ffffff;
+  --on-ink: #ffffff;
   --font-display: 'Barlow Condensed', Impact, sans-serif;
   --font-ui: 'Instrument Sans Variable', 'Instrument Sans', system-ui, sans-serif;
   --font-mono: 'Barlow Condensed', ui-monospace, monospace;
   color-scheme: light;
 }
 
-/* Lights-down counterpart: same inked-outline identity, keep in sync with theme.svelte.ts. */
+/* Dark counterpart, tuned to Jellyfin's near-black; keep in sync with theme.svelte.ts. */
 :root[data-theme='dark'] {
-  --bg: #1c1728;
-  --surface: #272134;
-  --surface-2: #322a45;
-  --line: #cec6e4;
-  --ink: #ece8f6;
-  --muted: #9c94b5;
-  --sonarr: #3aa9c9;
-  --radarr: #f08a55;
-  --ok: #4caf8d;
-  --live: #e66276;
-  --glow: rgb(151 132 219 / 0.1);
-  --on-accent: #14101f;
+  --bg: #0f0f13;
+  --surface: #17171c;
+  --surface-2: #23232a;
+  --line: #27272f;
+  --ink: #ececf1;
+  --muted: #9a9aa6;
+  --sonarr: #33b6e4;
+  --radarr: #bd77d6;
+  --accent: #00a4dc;
+  --accent-2: #aa5cc3;
+  --ok: #43c188;
+  --live: #ee6f7c;
+  --on-accent: #ffffff;
+  --on-ink: #101014;
   color-scheme: dark;
 }
 
@@ -56,15 +67,6 @@ body {
   line-height: 1.45;
 }
 
-/* Viewport-fixed highlight; on the scrolling body it would tile and seam. */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: radial-gradient(circle at 12% 8%, var(--glow), transparent 28%);
-}
-
 #app {
   height: 100%;
   display: flex;
@@ -82,8 +84,8 @@ button {
 
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid var(--sonarr);
-  outline-offset: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .mono {

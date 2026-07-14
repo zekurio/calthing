@@ -5,7 +5,7 @@ export const TICKET_OUTLINE =
   'M2 9a3 3 0 0 0 0 6v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a3 3 0 0 0 0-6V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z'
 export const TICKET_NOTCHES = 'M13 5v2M13 17v2M13 11v2'
 
-const defaultIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#29213f"/><g transform="translate(12 12)" fill="none" stroke="#f9f6ed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${TICKET_OUTLINE}"/><path d="${TICKET_NOTCHES}"/></g></svg>`
+const defaultIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="jf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#aa5cc3"/><stop offset="1" stop-color="#00a4dc"/></linearGradient></defs><rect width="48" height="48" rx="12" fill="url(#jf)"/><g transform="translate(12 12)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${TICKET_OUTLINE}"/><path d="${TICKET_NOTCHES}"/></g></svg>`
 
 export const DEFAULT_ICON_URL = `data:image/svg+xml,${encodeURIComponent(defaultIconSvg)}`
 

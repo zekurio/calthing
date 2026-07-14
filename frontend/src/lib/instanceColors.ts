@@ -1,8 +1,10 @@
 import type { InstanceStatusDto, Source } from '../../../shared/api.ts'
 
+/* Monochrome UI, Jellyfin duotone identity: movies take the purple end of the
+ * gradient, series the blue end; extra instances step along each family. */
 const palettes: Record<Source, string[]> = {
-  radarr: ['#ed7c43', '#b85d91', '#9a68c7', '#c64d54', '#b38224'],
-  sonarr: ['#168dad', '#2b7b61', '#536fc2', '#8b68b6', '#b06e22'],
+  radarr: ['#9a4fb5', '#7a5fd0', '#c05a9e', '#5f55c9', '#b0699b'],
+  sonarr: ['#0090c4', '#2a7de0', '#00a3a3', '#4f68d8', '#1f8fa8'],
 }
 
 export function buildInstanceColors(instances: InstanceStatusDto[]): Record<string, string> {
