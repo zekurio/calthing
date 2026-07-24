@@ -60,7 +60,7 @@
 <svelte:window
   onclick={(event) => {
     const target = event.target
-    if (!(target instanceof Element && target.closest('.settings'))) settingsOpen = false
+    if (!(target instanceof Element && target.closest('.user-menu'))) settingsOpen = false
   }}
   onkeydown={(event) => {
     if (event.key === 'Escape') settingsOpen = false
@@ -110,14 +110,21 @@
     <button class:active={view === 'agenda'} onclick={() => onview('agenda')}>{t('viewAgenda')}</button>
   </div>
 
-  <details class="settings" bind:open={settingsOpen}>
-    <summary aria-label={t('settings')} title={t('settings')}>
+  <details class="user-menu" bind:open={settingsOpen}>
+    <summary class="avatar-btn" aria-label={t('menu')} title={t('menu')}>
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09A1.7 1.7 0 0 0 8.94 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.57 15a1.7 1.7 0 0 0-1.56-1.03H3v-4h.09A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.57a1.7 1.7 0 0 0 1.03-1.56V3h4v.09A1.7 1.7 0 0 0 15.06 4.6a1.7 1.7 0 0 0 1.88-.34L17 4.2 19.83 7l-.06.06A1.7 1.7 0 0 0 19.43 9a1.7 1.7 0 0 0 1.56 1.03H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z" />
+        <path d="M18 20a6 6 0 0 0-12 0" />
+        <circle cx="12" cy="10" r="4" />
+        <circle cx="12" cy="12" r="10" />
       </svg>
     </summary>
-    <div class="settings-menu">
+    <div class="menu">
+      {#if me?.name}
+        <div class="menu-user">
+          <span class="menu-user-name">{me.name}</span>
+        </div>
+        <div class="menu-sep"></div>
+      {/if}
       {#if sourceGroups.length > 0}
         <section>
           <span class="menu-label">{t('sources')}</span>
@@ -183,13 +190,15 @@
       </section>
 
       {#if me?.name}
-        <section>
-          <span class="menu-label">{t('account')}</span>
-          <button class="signout" onclick={onsignout}>
-            <span class="name">{me.name}</span>
-            <span class="signout-label">{t('signOut')}</span>
-          </button>
-        </section>
+        <div class="menu-sep"></div>
+        <button class="signout" onclick={onsignout}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10 17l5-5-5-5" />
+            <path d="M15 12H3" />
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+          </svg>
+          <span>{t('signOut')}</span>
+        </button>
       {/if}
     </div>
   </details>
@@ -199,9 +208,9 @@
   header {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     flex-wrap: wrap;
-    padding: 12px 24px;
+    padding: 10px 24px;
     width: 100%;
     background: var(--topbar-bg);
     color: var(--on-topbar);
@@ -214,16 +223,16 @@
   .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
   }
 
   .tile {
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     display: grid;
     place-items: center;
     background: var(--topbar-tile);
-    border-radius: 9px;
+    border-radius: 8px;
     overflow: hidden;
   }
 
@@ -244,7 +253,7 @@
   }
 
   .brand-name {
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 700;
     letter-spacing: -0.01em;
     margin: 0;
@@ -323,13 +332,13 @@
     box-shadow: var(--shadow-1);
   }
 
-  .settings {
+  .user-menu {
     position: relative;
   }
 
-  .settings summary {
-    width: 36px;
-    height: 36px;
+  .avatar-btn {
+    width: 34px;
+    height: 34px;
     display: grid;
     place-items: center;
     border-radius: 99px;
@@ -338,40 +347,64 @@
     transition: background 120ms ease;
   }
 
-  .settings summary:hover,
-  .settings[open] summary {
+  .avatar-btn:hover,
+  .user-menu[open] .avatar-btn {
     background: var(--topbar-hover);
   }
 
-  .settings summary::-webkit-details-marker {
+  .avatar-btn::-webkit-details-marker {
     display: none;
   }
 
-  .settings summary svg {
-    width: 17px;
+  .avatar-btn svg {
+    width: 22px;
+    height: 22px;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
-  .settings-menu {
+  .menu {
     position: absolute;
     right: 0;
     top: calc(100% + 10px);
     z-index: 20;
     width: 250px;
     display: grid;
-    gap: 14px;
-    padding: 14px;
+    gap: 8px;
+    padding: 6px;
     border-radius: 14px;
     background: var(--surface);
     color: var(--ink);
     box-shadow: var(--shadow-2);
   }
 
-  .settings-menu section {
+  .menu section {
     display: grid;
     gap: 6px;
+    padding: 4px 6px;
+  }
+
+  .menu-user {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px 6px;
+  }
+
+  .menu-user-name {
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .menu-sep {
+    height: 1px;
+    margin: 0 8px;
+    background: var(--line);
   }
 
   .menu-label {
@@ -540,11 +573,10 @@
   .signout {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: 10px;
+    padding: 10px 12px;
     border-radius: 9px;
-    font-size: 0.88rem;
+    font-size: 14px;
     text-align: left;
     transition: background 120ms ease;
   }
@@ -553,24 +585,19 @@
     background: var(--surface-2);
   }
 
-  .signout .name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .signout .signout-label {
-    color: var(--muted);
-    flex-shrink: 0;
-  }
-
-  .signout:hover .signout-label {
-    color: var(--live);
+  .signout svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   @media (max-width: 800px) {
     header {
-      padding: 10px 12px;
+      padding: 8px 12px;
     }
 
     .spacer {
