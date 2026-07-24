@@ -32,8 +32,8 @@ Deno.test('parseConfig loads explicit values', () => {
     futureDays: 14,
     name: 'Test Calendar',
     availabilityDelayMs: 45 * 60 * 1000,
+    feedSecret: '',
   })
-  assertEquals(config.auth.secret, '')
   assertEquals(config.instances, [
     {
       name: 'movies',
@@ -71,8 +71,8 @@ instances:
     futureDays: 90,
     name: 'Media Calendar',
     availabilityDelayMs: 0,
+    feedSecret: '',
   })
-  assertEquals(config.auth.secret, '')
   assertEquals(config.branding, {
     name: 'calthing',
     iconUrl: '',
@@ -87,7 +87,12 @@ instances:
 
 Deno.test('parseConfig loads branding and private/public Jellyfin URLs', () => {
   const config = parseConfig(
-    `${validYaml}
+    `${
+      validYaml.replace(
+        '  availability_delay: 45m',
+        '  availability_delay: 45m\n  feed_secret: feed-secret',
+      )
+    }
 branding:
   name: Friendsflix
   icon_url: https://static.example/ticket.svg
@@ -114,15 +119,18 @@ jellyfin:
   })
 })
 
-Deno.test('parseConfig accepts a Jellyfin URL alone for login but rejects partial linking config', () => {
+Deno.test('parseConfig enables login from Jellyfin URL and rejects partial linking config', () => {
   const authOnly = parseConfig(
-    `${validYaml}
-auth:
-  secret: feed-secret
+    `${
+      validYaml.replace(
+        '  availability_delay: 45m',
+        '  availability_delay: 45m\n  feed_secret: feed-secret',
+      )
+    }
 jellyfin: {url: 'http://jellyfin:8096'}`,
     {},
   )
-  assertEquals(authOnly.auth.secret, 'feed-secret')
+  assertEquals(authOnly.calendar.feedSecret, 'feed-secret')
   assertEquals(authOnly.jellyfin, { url: 'http://jellyfin:8096', publicUrl: '', apiKey: '' })
 
   assertThrows(
@@ -142,12 +150,28 @@ jellyfin: {public_url: 'https://watch.example', api_key: k}`,
   )
 })
 
-Deno.test('parseConfig rejects an auth secret without a Jellyfin URL to log in against', () => {
-  assertThrows(
-    () => parseConfig(`${validYaml}\nauth: {secret: feed-secret}`, {}),
-    Error,
-    'auth.secret requires jellyfin.url',
-  )
+Deno.test('parseConfig requires the feed secret and Jellyfin URL together', async (t) => {
+  await t.step('Jellyfin login needs a feed signing secret', () => {
+    assertThrows(
+      () => parseConfig(`${validYaml}\njellyfin: {url: 'http://jellyfin:8096'}`, {}),
+      Error,
+      'calendar.feed_secret is required when jellyfin.url is set',
+    )
+  })
+  await t.step('a feed signing secret needs Jellyfin user IDs', () => {
+    assertThrows(
+      () =>
+        parseConfig(
+          validYaml.replace(
+            '  availability_delay: 45m',
+            '  availability_delay: 45m\n  feed_secret: feed-secret',
+          ),
+          {},
+        ),
+      Error,
+      'calendar.feed_secret requires jellyfin.url',
+    )
+  })
 })
 
 Deno.test('parseConfig expands environment references and applies non-empty overrides', () => {

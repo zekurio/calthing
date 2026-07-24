@@ -53,7 +53,8 @@ in
       example = "/run/secrets/calthing.env";
       description = ''
         systemd EnvironmentFile providing the variables referenced as
-        ''${VAR} in settings (API keys), e.g. from agenix or sops-nix.
+        ''${VAR} in settings (API keys and feed signing secrets), e.g. from
+        agenix or sops-nix.
       '';
     };
   };

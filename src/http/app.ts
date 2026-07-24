@@ -9,8 +9,7 @@ import type { InstanceStatusDto } from '../../shared/api.ts'
 
 export interface AppConfig {
   cache: { ttlMs: number }
-  calendar: { pastDays: number; futureDays: number; name: string }
-  auth: { secret: string }
+  calendar: { pastDays: number; futureDays: number; name: string; feedSecret: string }
   branding: { name: string; iconUrl: string; pageTitle: string; description: string }
   instances: readonly unknown[]
 }
@@ -189,7 +188,7 @@ export function createApp(dependencies: AppDependencies) {
   const logger = dependencies.logger ?? defaultLogger
   const staticHandler = createStaticHandler(dependencies.staticDir)
   const requestStarted = new WeakMap<Request, number>()
-  const authEnabled = config.auth.secret !== '' && auth !== undefined
+  const authEnabled = auth !== undefined
 
   const sessionCookie = (token: string, maxAge: number = SESSION_MAX_AGE) =>
     `${SESSION_COOKIE}=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}`
@@ -273,7 +272,7 @@ export function createApp(dependencies: AppDependencies) {
       set.headers['content-type'] = 'application/json; charset=utf-8'
       return {
         name: session.user.name,
-        feedToken: await signFeedToken(config.auth.secret, session.user.id),
+        feedToken: await signFeedToken(config.calendar.feedSecret, session.user.id),
       }
     }, {
       body: loginBodySchema,
@@ -303,7 +302,7 @@ export function createApp(dependencies: AppDependencies) {
       }
       return {
         name: user.name,
-        feedToken: await signFeedToken(config.auth.secret, user.id),
+        feedToken: await signFeedToken(config.calendar.feedSecret, user.id),
       }
     }, {
       response: {
@@ -321,8 +320,10 @@ export function createApp(dependencies: AppDependencies) {
       response: healthResponseSchema,
     })
     .get('/calendar.ics', async ({ query, set, status }) => {
-      if (config.auth.secret !== '') {
-        const userId = query.token ? await verifyFeedToken(config.auth.secret, query.token) : null
+      if (authEnabled) {
+        const userId = query.token
+          ? await verifyFeedToken(config.calendar.feedSecret, query.token)
+          : null
         if (userId === null) {
           Object.assign(set.headers, errorHeaders)
           return status(401, 'unauthorized\n')

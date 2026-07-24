@@ -21,9 +21,7 @@ export interface Config {
     futureDays: number
     name: string
     availabilityDelayMs: number
-  }
-  auth: {
-    secret: string
+    feedSecret: string
   }
   branding: {
     name: string
@@ -181,8 +179,13 @@ function validate(config: Config): void {
       throw new Error('config: jellyfin.url is required when public_url and api_key are set')
     }
   }
-  if (config.auth.secret !== '' && config.jellyfin.url === '') {
-    throw new Error('config: auth.secret requires jellyfin.url — login uses Jellyfin accounts')
+  if (config.jellyfin.url !== '' && config.calendar.feedSecret === '') {
+    throw new Error(
+      'config: calendar.feed_secret is required when jellyfin.url is set — it signs personal feed URLs',
+    )
+  }
+  if (config.calendar.feedSecret !== '' && config.jellyfin.url === '') {
+    throw new Error('config: calendar.feed_secret requires jellyfin.url')
   }
   for (
     const [path, value] of [
@@ -258,7 +261,6 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
   const root = record(parsed, 'root')
   const cache = record(root.cache, 'cache')
   const calendar = record(root.calendar, 'calendar')
-  const auth = record(root.auth, 'auth')
   const branding = record(root.branding, 'branding')
   const jellyfin = record(root.jellyfin, 'jellyfin')
   if (root.instances !== undefined && !Array.isArray(root.instances)) {
@@ -290,8 +292,8 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
       futureDays: integerValue(calendar.future_days, DEFAULT_FUTURE_DAYS, 'calendar.future_days'),
       name: stringValue(calendar.name, DEFAULT_CALENDAR_NAME, 'calendar.name'),
       availabilityDelayMs,
+      feedSecret: stringValue(calendar.feed_secret, '', 'calendar.feed_secret'),
     },
-    auth: { secret: stringValue(auth.secret, '', 'auth.secret') },
     branding: {
       name: stringValue(branding.name, DEFAULT_BRAND_NAME, 'branding.name'),
       iconUrl: stringValue(branding.icon_url, '', 'branding.icon_url'),

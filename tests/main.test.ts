@@ -57,8 +57,13 @@ Deno.test('importing main does not start a server and buildApp wires health with
   const config: Config = {
     listen: ':0',
     cache: { ttlMs: 60_000 },
-    calendar: { pastDays: 30, futureDays: 90, name: 'Test', availabilityDelayMs: 0 },
-    auth: { secret: '' },
+    calendar: {
+      pastDays: 30,
+      futureDays: 90,
+      name: 'Test',
+      availabilityDelayMs: 0,
+      feedSecret: '',
+    },
     branding: { name: 'calthing', iconUrl: '', pageTitle: '', description: '' },
     jellyfin: { url: '', publicUrl: '', apiKey: '' },
     instances: [],

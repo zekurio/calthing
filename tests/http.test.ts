@@ -8,8 +8,13 @@ import { signFeedToken, verifyFeedToken } from '../src/services/tokens.ts'
 const config: Config = {
   listen: ':0',
   cache: { ttlMs: 65_500 },
-  calendar: { pastDays: 30, futureDays: 90, name: 'Test Calendar', availabilityDelayMs: 0 },
-  auth: { secret: '' },
+  calendar: {
+    pastDays: 30,
+    futureDays: 90,
+    name: 'Test Calendar',
+    availabilityDelayMs: 0,
+    feedSecret: '',
+  },
   branding: { name: 'calthing', iconUrl: '', pageTitle: '', description: '' },
   jellyfin: { url: '', publicUrl: '', apiKey: '' },
   instances: [{
@@ -38,12 +43,14 @@ const event: CalendarEvent = {
   posterUrl: 'https://example.test/poster.jpg',
 }
 
-function copyConfig(secret = ''): Config {
+function copyConfig(feedSecret = ''): Config {
   return {
     ...config,
     cache: { ...config.cache },
-    calendar: { ...config.calendar },
-    auth: { secret },
+    calendar: { ...config.calendar, feedSecret },
+    jellyfin: feedSecret
+      ? { ...config.jellyfin, url: 'http://jellyfin.example' }
+      : { ...config.jellyfin },
     instances: config.instances.map((instance) => ({ ...instance })),
   }
 }

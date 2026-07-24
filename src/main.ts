@@ -93,7 +93,7 @@ export function buildApp(config: Config, staticDir?: string) {
       linker,
       config.calendar.availabilityDelayMs,
     ),
-    auth: config.auth.secret !== '' ? jellyfin : undefined,
+    auth: jellyfin,
     staticDir,
   })
 }

@@ -16,15 +16,10 @@ calendar:
   availability_delay: 1h
   # X-WR-CALNAME shown by calendar clients.
   name: 'Media Calendar'
-
-auth:
-  # Optional: enables Jellyfin login for the web UI and per-user calendar
-  # feed tokens. Users sign in with their Jellyfin account; each user gets a
-  # personal /calendar.ics?token=… URL signed with this secret. Requires
-  # jellyfin.url below. Use a long random string (e.g. `openssl rand -hex 32`);
-  # rotating it invalidates every feed URL at once. Leave empty for a public
-  # calendar without login.
-  secret: ''
+  # Signs personal /calendar.ics?token=… URLs. Required with jellyfin.url.
+  # Use a long random string (e.g. `nix shell nixpkgs#openssl --command
+  # openssl rand -hex 32`); rotating it invalidates every personal feed URL.
+  feed_secret: ''
 
 instances:
   - name: movies # unique; part of event UIDs — treat as stable, renaming re-creates events in subscribed calendars
@@ -45,7 +40,7 @@ branding:
   page_title: 'calthing · Was läuft'
   description: 'Das gemeinsame Film- und Serienprogramm.'
 
-# Optional Jellyfin integration. `url` alone is enough for login (auth.secret);
+# Optional Jellyfin integration. Setting `url` enables Jellyfin login;
 # `public_url` and `api_key` additionally enable linking events to Jellyfin
 # items. `url` is used only server-side; `public_url` is used for links opened
 # by calendar visitors.

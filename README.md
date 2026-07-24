@@ -1,7 +1,7 @@
 # calthing
 
-One calendar for your whole \*arr stack. calthing queries the calendar APIs of any number of
-Radarr and Sonarr instances and serves:
+One calendar for your whole \*arr stack. calthing queries the calendar APIs of any number of Radarr
+and Sonarr instances and serves:
 
 - **`/calendar.ics`** — a single merged iCal feed you can subscribe to from Google Calendar, Apple
   Calendar, or anything else that speaks iCal.
@@ -43,9 +43,7 @@ calendar:
   future_days: 90
   availability_delay: 1h # show episodes after download/transcode time
   name: 'Media Calendar' # calendar name shown by clients
-
-auth:
-  secret: '' # if set, enables Jellyfin login + per-user feed tokens (see below)
+  feed_secret: ${CALTHING_FEED_SECRET} # signs per-user feed tokens; required with Jellyfin login
 
 instances:
   - name: movies # unique, stable — part of event UIDs
@@ -69,25 +67,26 @@ branding:
   description: 'The shared movie and TV schedule.'
 
 jellyfin:
-  url: http://127.0.0.1:8096             # private API address
+  url: http://127.0.0.1:8096 # private API address
   public_url: https://jellyfin.example.com # links shown to visitors
   api_key: ${JELLYFIN_API_KEY}
 ```
 
-When configured, calthing matches Sonarr episodes to Jellyfin by TVDB episode ID. Available
-episodes get a direct Jellyfin link in their event details. The API key and private URL stay on the
-server and are never returned to the browser. `url` alone is enough for login; `public_url` and
-`api_key` additionally enable linking.
+When configured, calthing matches Sonarr episodes to Jellyfin by TVDB episode ID. Available episodes
+get a direct Jellyfin link in their event details. The API key and private URL stay on the server
+and are never returned to the browser. `url` enables login; `public_url` and `api_key` additionally
+enable linking.
 
 `${VAR}` references are expanded from the environment at startup and fail loudly when unset — pair
-them with a systemd `EnvironmentFile` for secrets. `CALTHING_LISTEN` and
-`CALTHING_CONFIG` override their config counterparts. `CALTHING_STATIC_DIR` can
-override the frontend asset directory; packaged installations set it automatically.
+them with a systemd `EnvironmentFile` for secrets. `CALTHING_LISTEN` and `CALTHING_CONFIG` override
+their config counterparts. `CALTHING_STATIC_DIR` can override the frontend asset directory; packaged
+installations set it automatically.
 
 ## Auth model
 
-Setting `auth.secret` (any long random string, e.g. `openssl rand -hex 32`) turns on
-Jellyfin-backed auth:
+Setting `jellyfin.url` turns on Jellyfin-backed auth. `calendar.feed_secret` must also be set to a
+long random string (for example, `nix shell nixpkgs#openssl --command openssl rand -hex 32`) so
+calthing can issue personal calendar feed URLs:
 
 - **Web UI** — visitors sign in with their Jellyfin username and password
   (`/Users/AuthenticateByName`). The Jellyfin access token is stored in an HttpOnly session cookie
@@ -96,23 +95,23 @@ Jellyfin-backed auth:
 - **Calendar feed** — calendar clients cannot log in, so each user gets a personal
   `/calendar.ics?token=…` URL (shown behind the copy-link button). The token is
   `<userId>.<HMAC-SHA256(secret, userId)>`: it grants access to the feed only, never to Jellyfin.
-  Rotating `auth.secret` invalidates every feed URL at once.
+  Rotating `calendar.feed_secret` invalidates every feed URL at once.
 
-With `auth.secret` empty, the calendar and feed are public — put them behind your reverse proxy's
-auth if they should not be reachable. Renaming an instance changes its event UIDs, which re-creates
-those events in subscribed calendars; treat instance names as stable.
+Without `jellyfin.url`, the calendar and feed are public — put them behind your reverse proxy's auth
+if they should not be reachable. Renaming an instance changes its event UIDs, which re-creates those
+events in subscribed calendars; treat instance names as stable.
 
 ## Endpoints
 
-| Route               | Description                                                                 |
-| ------------------- | --------------------------------------------------------------------------- |
+| Route               | Description                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `GET /calendar.ics` | Merged iCal feed. Optional `?start=YYYY-MM-DD&end=YYYY-MM-DD`; requires the per-user `?token=` when auth is enabled |
-| `GET /api/events`   | JSON events and per-instance status, with the same `start`/`end` parameters |
-| `POST /api/auth`    | Jellyfin login; sets the session cookie                                     |
-| `GET /api/me`       | Current session and personal feed token                                     |
-| `POST /api/logout`  | Ends the session                                                            |
-| `GET /api/health`   | Liveness probe                                                              |
-| `GET /`             | Web calendar                                                                |
+| `GET /api/events`   | JSON events and per-instance status, with the same `start`/`end` parameters                                         |
+| `POST /api/auth`    | Jellyfin login; sets the session cookie                                                                             |
+| `GET /api/me`       | Current session and personal feed token                                                                             |
+| `POST /api/logout`  | Ends the session                                                                                                    |
+| `GET /api/health`   | Liveness probe                                                                                                      |
+| `GET /`             | Web calendar                                                                                                        |
 
 One instance being down never kills the feed: its error is reported in `/api/events` and shown in
 the UI while the remaining instances serve.
