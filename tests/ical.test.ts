@@ -26,7 +26,7 @@ function itemAt<T>(items: readonly T[], index: number): T {
 function fixtureEvents(): CalendarEvent[] {
   return [
     {
-      uid: 'sonarr-tv-101@arr-cal-proxy',
+      uid: 'sonarr-tv-101@calthing',
       instance: 'tv',
       source: 'sonarr',
       kind: 'episode',
@@ -42,7 +42,7 @@ function fixtureEvents(): CalendarEvent[] {
       posterUrl: '',
     },
     {
-      uid: 'radarr-movies-42-digital@arr-cal-proxy',
+      uid: 'radarr-movies-42-digital@calthing',
       instance: 'movies',
       source: 'radarr',
       kind: 'movie-digital',
@@ -83,7 +83,7 @@ Deno.test('generateCalendar emits metadata, summaries, escaping, and date forms'
   for (
     const expected of [
       'VERSION:2.0\r\n',
-      'PRODID:-//arr-cal-proxy//EN\r\n',
+      'PRODID:-//calthing//EN\r\n',
       'METHOD:PUBLISH\r\n',
       'NAME:Test\\, Calendar\\; \\\\ Feed\r\n',
       'X-WR-CALNAME:Test\\, Calendar\\; \\\\ Feed\r\n',

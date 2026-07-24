@@ -5,10 +5,10 @@
   makeWrapper,
   version ? "0.1.0",
   denoDepsHashes ? {
-    aarch64-darwin = "sha256-p8NB8Z4nKvZKCAUh3R5VsZaoaRbO7tHN7wvaA+amiLI=";
-    x86_64-darwin = "sha256-Qj909sIU2+H4Bc/u/w6pV1r38iKe5TyrNPPTXOfn1kw=";
-    aarch64-linux = "sha256-pFXBoAmm9cnF5reRby+zCV2TslYBaE4r12ga1Q2NJ+g=";
-    x86_64-linux = "sha256-5bH3vEo02y8qMDHbTsjZMdRFBL699qECjt+iPTgXAXg=";
+    aarch64-darwin = "sha256-IuonLz8Yi+wpZKt2vBjYpD8VkI/IXRVFSACol20NVgQ=";
+    x86_64-darwin = "sha256-hrrnX4etdrxKz0+ZRDsVRHCTNoRNWbI7Qj3I/z3BlX0=";
+    aarch64-linux = "sha256-LmdMHirDqJvVjvxclMN/iO04ijbtdl5d383TRkz1PZI=";
+    x86_64-linux = "sha256-fPGVJcn7gpmgefJL9dq6cxiqc0Iiix+0dKTAr51p1hk=";
   },
 }:
 
@@ -44,7 +44,7 @@ let
   # directories Deno uses at run time: node_modules (npm packages) and
   # vendor (jsr modules, via `"vendor": true` in deno.json).
   denoDeps = stdenvNoCC.mkDerivation {
-    pname = "arr-cal-proxy-deno-dependencies";
+    pname = "calthing-deno-dependencies";
     inherit version;
     src = dependencySource;
 
@@ -73,7 +73,7 @@ let
   };
 
   frontend = stdenvNoCC.mkDerivation {
-    pname = "arr-cal-proxy-frontend";
+    pname = "calthing-frontend";
     inherit version;
     src = projectSource;
 
@@ -97,7 +97,7 @@ let
   };
 in
 stdenvNoCC.mkDerivation {
-  pname = "arr-cal-proxy";
+  pname = "calthing";
   inherit version;
   src = projectSource;
 
@@ -107,16 +107,16 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    app=$out/share/arr-cal-proxy
+    app=$out/share/calthing
     mkdir -p $app $out/bin
     cp -r deno.json deno.lock shared src $app/
     ln -s ${denoDeps}/node_modules $app/node_modules
     ln -s ${denoDeps}/vendor $app/vendor
     cp -r ${frontend} $app/frontend
 
-    makeWrapper ${deno}/bin/deno $out/bin/arr-cal-proxy \
+    makeWrapper ${deno}/bin/deno $out/bin/calthing \
       --add-flags "run --cached-only --frozen --no-prompt --config $app/deno.json --node-modules-dir=manual --allow-env --allow-net --allow-read $app/src/main.ts" \
-      --set ARR_CAL_PROXY_STATIC_DIR "$app/frontend"
+      --set CALTHING_STATIC_DIR "$app/frontend"
 
     runHook postInstall
   '';
@@ -125,7 +125,7 @@ stdenvNoCC.mkDerivation {
 
   meta = {
     description = "Merged Radarr/Sonarr calendar feed with a web UI";
-    homepage = "https://github.com/zekurio/arr-cal-proxy";
-    mainProgram = "arr-cal-proxy";
+    homepage = "https://github.com/zekurio/calthing";
+    mainProgram = "calthing";
   };
 }

@@ -24,8 +24,8 @@ Deno.test('parseArgs preserves legacy config precedence and static root override
   })
   assertEquals(
     parseArgs([], {
-      ARR_CAL_PROXY_CONFIG: '/env/config.yaml',
-      ARR_CAL_PROXY_STATIC_DIR: '/srv/frontend',
+      CALTHING_CONFIG: '/env/config.yaml',
+      CALTHING_STATIC_DIR: '/srv/frontend',
     }),
     {
       configPath: '/env/config.yaml',
@@ -34,7 +34,7 @@ Deno.test('parseArgs preserves legacy config precedence and static root override
   )
   assertEquals(
     parseArgs(['-config', '/cli/config.yaml'], {
-      ARR_CAL_PROXY_CONFIG: '/env/config.yaml',
+      CALTHING_CONFIG: '/env/config.yaml',
     }),
     {
       configPath: '/cli/config.yaml',
@@ -58,8 +58,8 @@ Deno.test('importing main does not start a server and buildApp wires health with
     listen: ':0',
     cache: { ttlMs: 60_000 },
     calendar: { pastDays: 30, futureDays: 90, name: 'Test', availabilityDelayMs: 0 },
-    auth: { token: '' },
-    branding: { name: 'Jellyfin', iconUrl: '', pageTitle: '', description: '' },
+    auth: { secret: '' },
+    branding: { name: 'calthing', iconUrl: '', pageTitle: '', description: '' },
     jellyfin: { url: '', publicUrl: '', apiKey: '' },
     instances: [],
   }
@@ -73,7 +73,7 @@ Deno.test('main reports config read failures instead of starting the listener', 
   await assertRejects(
     () =>
       main([], {
-        ARR_CAL_PROXY_CONFIG: '/definitely/missing/arr-cal-proxy-config.yaml',
+        CALTHING_CONFIG: '/definitely/missing/calthing-config.yaml',
       }),
     Error,
     'read config:',

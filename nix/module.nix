@@ -1,4 +1,4 @@
-# NixOS module: services.arr-cal-proxy
+# NixOS module: services.calthing
 # Imported from the flake as `nixosModules.default`.
 { self }:
 
@@ -9,19 +9,19 @@
   ...
 }:
 let
-  cfg = config.services.arr-cal-proxy;
+  cfg = config.services.calthing;
   settingsFormat = pkgs.formats.yaml { };
-  configFile = settingsFormat.generate "arr-cal-proxy.yaml" cfg.settings;
+  configFile = settingsFormat.generate "calthing.yaml" cfg.settings;
 in
 {
-  options.services.arr-cal-proxy = {
-    enable = lib.mkEnableOption "arr-cal-proxy, a merged Radarr/Sonarr calendar feed";
+  options.services.calthing = {
+    enable = lib.mkEnableOption "calthing, a merged Radarr/Sonarr calendar feed";
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = self.packages.${pkgs.stdenv.hostPlatform.system}.arr-cal-proxy;
-      defaultText = lib.literalExpression "arr-cal-proxy from its flake";
-      description = "The arr-cal-proxy package to use.";
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.calthing;
+      defaultText = lib.literalExpression "calthing from its flake";
+      description = "The calthing package to use.";
     };
 
     settings = lib.mkOption {
@@ -41,7 +41,7 @@ in
         }
       '';
       description = ''
-        arr-cal-proxy configuration, serialized to YAML. See
+        calthing configuration, serialized to YAML. See
         config.example.yaml in the source repository for all options.
         Reference secrets as ''${VAR} and provide them via environmentFile.
       '';
@@ -50,7 +50,7 @@ in
     environmentFile = lib.mkOption {
       type = with lib.types; nullOr path;
       default = null;
-      example = "/run/secrets/arr-cal-proxy.env";
+      example = "/run/secrets/calthing.env";
       description = ''
         systemd EnvironmentFile providing the variables referenced as
         ''${VAR} in settings (API keys), e.g. from agenix or sops-nix.
@@ -59,7 +59,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    systemd.services.arr-cal-proxy = {
+    systemd.services.calthing = {
       description = "Merged Radarr/Sonarr calendar feed";
       wantedBy = [ "multi-user.target" ];
       wants = [ "network-online.target" ];
@@ -68,8 +68,8 @@ in
       serviceConfig = {
         ExecStart = "${lib.getExe cfg.package} -config ${configFile}";
         EnvironmentFile = lib.optional (cfg.environmentFile != null) cfg.environmentFile;
-        Environment = "DENO_DIR=%C/arr-cal-proxy";
-        CacheDirectory = "arr-cal-proxy";
+        Environment = "DENO_DIR=%C/calthing";
+        CacheDirectory = "calthing";
         Restart = "on-failure";
         DynamicUser = true;
 

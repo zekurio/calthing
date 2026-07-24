@@ -2,14 +2,15 @@ import { assert, assertEquals, assertMatch, assertStringIncludes } from '@std/as
 
 import type { Config } from '../src/config.ts'
 import type { CalendarEvent } from '../src/domain/event.ts'
-import { createApp, type Logger } from '../src/http/app.ts'
+import { type AuthClient, createApp, type Logger } from '../src/http/app.ts'
+import { signFeedToken, verifyFeedToken } from '../src/services/tokens.ts'
 
 const config: Config = {
   listen: ':0',
   cache: { ttlMs: 65_500 },
   calendar: { pastDays: 30, futureDays: 90, name: 'Test Calendar', availabilityDelayMs: 0 },
-  auth: { token: '' },
-  branding: { name: 'Jellyfin', iconUrl: '', pageTitle: '', description: '' },
+  auth: { secret: '' },
+  branding: { name: 'calthing', iconUrl: '', pageTitle: '', description: '' },
   jellyfin: { url: '', publicUrl: '', apiKey: '' },
   instances: [{
     name: 'tv',
@@ -21,7 +22,7 @@ const config: Config = {
 }
 
 const event: CalendarEvent = {
-  uid: 'sonarr-tv-1@arr-cal-proxy',
+  uid: 'sonarr-tv-1@calthing',
   instance: 'tv',
   source: 'sonarr',
   kind: 'episode',
@@ -37,14 +38,26 @@ const event: CalendarEvent = {
   posterUrl: 'https://example.test/poster.jpg',
 }
 
-function copyConfig(token = ''): Config {
+function copyConfig(secret = ''): Config {
   return {
     ...config,
     cache: { ...config.cache },
     calendar: { ...config.calendar },
-    auth: { token },
+    auth: { secret },
     instances: config.instances.map((instance) => ({ ...instance })),
   }
+}
+
+/** Stub Jellyfin: one account (alice/right) whose session token is "jf-token". */
+const stubAuth: AuthClient = {
+  async authenticate(username, password) {
+    if (username !== 'alice' || password !== 'right') return null
+    return { token: 'jf-token', user: { id: 'user-1', name: 'alice' } }
+  },
+  async user(token) {
+    return token === 'jf-token' ? { id: 'user-1', name: 'alice' } : null
+  },
+  async logout() {},
 }
 
 function request(
@@ -146,10 +159,11 @@ Deno.test('date windows reject malformed, impossible, and non-increasing dates',
   assertEquals(calls, 0)
 })
 
-Deno.test('ICS authenticates before date validation and returns calendar cache headers', async () => {
+Deno.test('ICS requires a per-user feed token before date validation and returns cache headers', async () => {
   let calls = 0
   const app = createApp({
-    config: copyConfig('sekrit'),
+    config: copyConfig('feed-secret'),
+    auth: stubAuth,
     now: () => new Date('2026-07-11T00:00:00Z'),
     logger: { info() {} },
     fetcher: {
@@ -160,23 +174,149 @@ Deno.test('ICS authenticates before date validation and returns calendar cache h
     },
   })
 
-  for (const path of ['/calendar.ics?start=banana', '/calendar.ics?token=wrong&start=banana']) {
+  const otherSecret = await signFeedToken('other-secret', 'user-1')
+  for (
+    const path of [
+      '/calendar.ics?start=banana',
+      '/calendar.ics?token=wrong&start=banana',
+      `/calendar.ics?token=${otherSecret}`,
+    ]
+  ) {
     const response = await request(app, path)
-    assertEquals(response.status, 401)
+    assertEquals(response.status, 401, path)
     assertEquals(await response.text(), 'unauthorized\n')
   }
-  const invalid = await request(app, '/calendar.ics?token=sekrit&start=banana')
+
+  const token = await signFeedToken('feed-secret', 'user-1')
+  const invalid = await request(app, `/calendar.ics?token=${token}&start=banana`)
   assertEquals(invalid.status, 400)
   assertStringIncludes(await invalid.text(), 'invalid start')
 
-  const response = await request(app, '/calendar.ics?token=sekrit&start=2026-07-01&end=2026-08-01')
+  const response = await request(
+    app,
+    `/calendar.ics?token=${token}&start=2026-07-01&end=2026-08-01`,
+  )
   assertEquals(response.status, 200)
   assertEquals(response.headers.get('content-type'), 'text/calendar; charset=utf-8')
   assertEquals(response.headers.get('cache-control'), 'max-age=65')
   const calendar = await response.text()
   assertStringIncludes(calendar, 'BEGIN:VCALENDAR')
-  assertStringIncludes(calendar, 'sonarr-tv-1@arr-cal-proxy')
+  assertStringIncludes(calendar, 'sonarr-tv-1@calthing')
   assertEquals(calls, 1)
+})
+
+Deno.test('login sets a session cookie, guards the API, and mints per-user feed tokens', async () => {
+  const app = createApp({
+    config: copyConfig('feed-secret'),
+    auth: stubAuth,
+    logger: { info() {} },
+    fetcher: {
+      async fetch() {
+        return { events: [], instances: [] }
+      },
+    },
+  })
+
+  const wrong = await request(app, '/api/auth', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'alice', password: 'wrong' }),
+  })
+  assertEquals(wrong.status, 401)
+  assertEquals(await wrong.text(), 'unauthorized\n')
+
+  const login = await request(app, '/api/auth', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'alice', password: 'right' }),
+  })
+  assertEquals(login.status, 200)
+  const cookie = login.headers.get('set-cookie') ?? ''
+  assertStringIncludes(cookie, 'calthing_session=jf-token')
+  assertStringIncludes(cookie, 'HttpOnly')
+  const body = await login.json()
+  assertEquals(body.name, 'alice')
+  assertEquals(await verifyFeedToken('feed-secret', body.feedToken), 'user-1')
+
+  const anonymous = await request(app, '/api/events')
+  assertEquals(anonymous.status, 401)
+  const anonymousMe = await request(app, '/api/me')
+  assertEquals(anonymousMe.status, 401)
+
+  const sessionHeaders = { cookie: 'calthing_session=jf-token' }
+  const events = await request(app, '/api/events', { headers: sessionHeaders })
+  assertEquals(events.status, 200)
+  const me = await request(app, '/api/me', { headers: sessionHeaders })
+  assertEquals(me.status, 200)
+  assertEquals(await me.json(), body)
+
+  const staleSession = await request(app, '/api/events', {
+    headers: { cookie: 'calthing_session=revoked' },
+  })
+  assertEquals(staleSession.status, 401)
+
+  const logout = await request(app, '/api/logout', { method: 'POST', headers: sessionHeaders })
+  assertEquals(logout.status, 200)
+  assertStringIncludes(logout.headers.get('set-cookie') ?? '', 'Max-Age=0')
+})
+
+Deno.test('auth disabled keeps the API and feed public and /api/me anonymous', async () => {
+  const app = createApp({
+    config: copyConfig(),
+    logger: { info() {} },
+    fetcher: {
+      async fetch() {
+        return { events: [], instances: [] }
+      },
+    },
+  })
+
+  assertEquals((await request(app, '/api/events')).status, 200)
+  assertEquals((await request(app, '/calendar.ics')).status, 200)
+  const me = await request(app, '/api/me')
+  assertEquals(me.status, 200)
+  assertEquals(await me.json(), { name: '', feedToken: '' })
+  const login = await request(app, '/api/auth', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'alice', password: 'right' }),
+  })
+  assertEquals(login.status, 404)
+})
+
+Deno.test('login answers 502 when Jellyfin is unreachable', async () => {
+  const app = createApp({
+    config: copyConfig('feed-secret'),
+    auth: {
+      authenticate() {
+        return Promise.reject(new Error('connection refused'))
+      },
+      user() {
+        return Promise.reject(new Error('connection refused'))
+      },
+      async logout() {},
+    },
+    logger: { info() {} },
+    fetcher: {
+      async fetch() {
+        return { events: [], instances: [] }
+      },
+    },
+  })
+
+  const login = await request(app, '/api/auth', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'alice', password: 'right' }),
+  })
+  assertEquals(login.status, 502)
+  assertEquals(await login.text(), 'jellyfin unreachable\n')
+
+  // an unreachable Jellyfin means sessions cannot be verified — fail closed
+  const events = await request(app, '/api/events', {
+    headers: { cookie: 'calthing_session=jf-token' },
+  })
+  assertEquals(events.status, 401)
 })
 
 Deno.test('health is static and does not fetch upstream instances', async () => {
@@ -252,4 +392,12 @@ Deno.test('unsupported methods return 405 and an Allow header', async () => {
     assertEquals(response.headers.get('allow'), 'GET, HEAD', path)
     assertMatch(await response.text(), /Method Not Allowed/)
   }
+  for (const path of ['/api/auth', '/api/logout']) {
+    const response = await request(app, path)
+    assertEquals(response.status, 405, path)
+    assertEquals(response.headers.get('allow'), 'POST', path)
+  }
+  const me = await request(app, '/api/me', { method: 'PUT' })
+  assertEquals(me.status, 405)
+  assertEquals(me.headers.get('allow'), 'GET, HEAD')
 })

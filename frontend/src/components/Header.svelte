@@ -1,6 +1,6 @@
 <script lang="ts">
   import { addDays, addMonths, monthLabel, startOfWeek, weekLabel } from '../lib/dates'
-  import type { BrandingDto, InstanceStatusDto } from '../../../shared/api.ts'
+  import type { BrandingDto, InstanceStatusDto, MeDto } from '../../../shared/api.ts'
   import { TICKET_NOTCHES, TICKET_OUTLINE } from '../lib/branding'
   import { i18n, setLocale, t } from '../lib/i18n.svelte.ts'
   import { setTheme, theme } from '../lib/theme.svelte.ts'
@@ -13,9 +13,11 @@
     loading,
     branding,
     instanceColors,
+    me,
     onview,
     onnavigate,
     ontoggleinstance,
+    onsignout,
   }: {
     view: 'month' | 'week' | 'agenda'
     viewDate: Date
@@ -24,9 +26,11 @@
     loading: boolean
     branding: BrandingDto
     instanceColors: Record<string, string>
+    me: MeDto | null
     onview: (v: 'month' | 'week' | 'agenda') => void
     onnavigate: (d: Date) => void
     ontoggleinstance: (name: string) => void
+    onsignout: () => void
   } = $props()
 
   let copied = $state(false)
@@ -40,8 +44,14 @@
     ].filter((group) => group.items.length > 0),
   )
 
+  const feedURL = $derived(
+    me?.feedToken
+      ? `${location.origin}/calendar.ics?token=${me.feedToken}`
+      : `${location.origin}/calendar.ics`,
+  )
+
   async function copyFeedURL() {
-    await navigator.clipboard.writeText(`${location.origin}/calendar.ics`)
+    await navigator.clipboard.writeText(feedURL)
     copied = true
     setTimeout(() => (copied = false), 2000)
   }
@@ -58,19 +68,18 @@
 />
 
 <header>
-  <div class="brand" aria-hidden="true">
-    {#if branding.iconUrl}
-      <img src={branding.iconUrl} alt="" />
-    {:else}
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d={TICKET_OUTLINE} />
-        <path d={TICKET_NOTCHES} />
-      </svg>
-    {/if}
-  </div>
-  <div class="title-lockup">
-    <h1>{branding.name}</h1>
-    <span class="eyebrow">{t('programme')}</span>
+  <div class="brand">
+    <span class="tile" aria-hidden="true">
+      {#if branding.iconUrl}
+        <img src={branding.iconUrl} alt="" />
+      {:else}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d={TICKET_OUTLINE} />
+          <path d={TICKET_NOTCHES} />
+        </svg>
+      {/if}
+    </span>
+    <h1 class="brand-name">{branding.name}</h1>
   </div>
 
   {#if view === 'agenda'}
@@ -172,6 +181,16 @@
           {/if}
         </button>
       </section>
+
+      {#if me?.name}
+        <section>
+          <span class="menu-label">{t('account')}</span>
+          <button class="signout" onclick={onsignout}>
+            <span class="name">{me.name}</span>
+            <span class="signout-label">{t('signOut')}</span>
+          </button>
+        </section>
+      {/if}
     </div>
   </details>
 </header>
@@ -182,38 +201,35 @@
     align-items: center;
     gap: 16px;
     flex-wrap: wrap;
-    padding: 16px 24px 22px;
-    max-width: 1560px;
+    padding: 12px 24px;
     width: 100%;
-    margin: 0 auto;
+    background: var(--topbar-bg);
+    color: var(--on-topbar);
+    border-bottom: 1px solid var(--topbar-border);
+    box-shadow: var(--shadow-1);
     position: relative;
-    border-bottom: 1px solid var(--line);
+    z-index: 5;
   }
 
   .brand {
-    width: 40px;
-    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .tile {
+    width: 34px;
+    height: 34px;
     display: grid;
     place-items: center;
-    background: var(--gradient);
-    color: var(--on-accent);
-    border-radius: 10px;
+    background: var(--topbar-tile);
+    border-radius: 9px;
     overflow: hidden;
   }
 
-  .brand svg,
-  .brand img {
-    width: 20px;
-    height: 20px;
-    object-fit: contain;
-  }
-
-  .brand img {
-    width: 100%;
-    height: 100%;
-  }
-
-  .brand svg {
+  .tile svg {
+    width: 18px;
+    height: 18px;
     fill: none;
     stroke: currentColor;
     stroke-width: 2;
@@ -221,53 +237,43 @@
     stroke-linejoin: round;
   }
 
-  .title-lockup {
-    display: grid;
-    gap: 1px;
-    line-height: 1.2;
+  .tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 
-  h1 {
-    font-size: 1.25rem;
-    font-weight: 650;
-    margin: 0;
+  .brand-name {
+    font-size: 17px;
+    font-weight: 700;
     letter-spacing: -0.01em;
-  }
-
-  .eyebrow {
-    color: var(--muted);
-    font-size: 0.72rem;
-    font-weight: 550;
-    letter-spacing: 0.02em;
+    margin: 0;
   }
 
   .month-nav {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-left: 16px;
+    gap: 10px;
+    margin-left: 12px;
   }
 
   .nav-group {
     display: flex;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--surface);
-    overflow: hidden;
+    gap: 2px;
+    background: var(--topbar-tile);
+    border-radius: 99px;
+    padding: 3px;
   }
 
   .nav-group button {
-    padding: 5px 11px;
+    padding: 4px 12px;
     font-size: 0.88rem;
-    color: var(--ink);
-  }
-
-  .nav-group button + button {
-    border-left: 1px solid var(--line);
+    border-radius: 99px;
+    transition: background 120ms ease;
   }
 
   .nav-group button:hover {
-    background: var(--surface-2);
+    background: var(--topbar-hover);
   }
 
   .today-btn {
@@ -275,13 +281,13 @@
   }
 
   .month-label {
-    font-size: 1.02rem;
+    font-size: 1rem;
     font-weight: 600;
     min-width: 10ch;
   }
 
   .loading {
-    color: var(--muted);
+    opacity: 0.6;
   }
 
   .spacer {
@@ -290,26 +296,31 @@
 
   .view-toggle {
     display: flex;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--surface);
-    overflow: hidden;
+    gap: 2px;
+    background: var(--topbar-tile);
+    border-radius: 99px;
+    padding: 3px;
   }
 
   .view-toggle button {
-    padding: 5px 14px;
+    padding: 4px 14px;
     font-size: 0.88rem;
-    color: var(--muted);
+    border-radius: 99px;
+    opacity: 0.75;
+    transition: background 120ms ease, opacity 120ms ease;
   }
 
-  .view-toggle button + button {
-    border-left: 1px solid var(--line);
+  .view-toggle button:hover {
+    opacity: 1;
+    background: var(--topbar-hover);
   }
 
   .view-toggle button.active {
-    background: var(--surface-2);
+    background: var(--surface);
     color: var(--ink);
     font-weight: 600;
+    opacity: 1;
+    box-shadow: var(--shadow-1);
   }
 
   .settings {
@@ -317,26 +328,19 @@
   }
 
   .settings summary {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     display: grid;
     place-items: center;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--surface);
-    color: var(--muted);
+    border-radius: 99px;
     cursor: pointer;
     list-style: none;
+    transition: background 120ms ease;
   }
 
-  .settings summary:hover {
-    color: var(--ink);
-    background: var(--surface-2);
-  }
-
+  .settings summary:hover,
   .settings[open] summary {
-    color: var(--ink);
-    background: var(--surface-2);
+    background: var(--topbar-hover);
   }
 
   .settings summary::-webkit-details-marker {
@@ -353,16 +357,16 @@
   .settings-menu {
     position: absolute;
     right: 0;
-    top: calc(100% + 8px);
-    z-index: 10;
+    top: calc(100% + 10px);
+    z-index: 20;
     width: 250px;
     display: grid;
     gap: 14px;
     padding: 14px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: 14px;
     background: var(--surface);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.16);
+    color: var(--ink);
+    box-shadow: var(--shadow-2);
   }
 
   .settings-menu section {
@@ -394,7 +398,8 @@
     align-items: center;
     gap: 8px;
     padding: 6px 8px;
-    border-radius: 7px;
+    border-radius: 9px;
+    transition: background 120ms ease;
     text-align: left;
     font-size: 0.88rem;
   }
@@ -448,9 +453,10 @@
 
   .seg-toggle {
     display: flex;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    overflow: hidden;
+    gap: 2px;
+    background: var(--surface-2);
+    border-radius: 99px;
+    padding: 3px;
   }
 
   .seg-toggle button {
@@ -458,15 +464,17 @@
     padding: 6px 0;
     font-size: 0.85rem;
     color: var(--muted);
+    border-radius: 99px;
+    transition: background 120ms ease, color 120ms ease;
   }
 
-  .seg-toggle button + button {
-    border-left: 1px solid var(--line);
+  .seg-toggle button:hover {
+    color: var(--ink);
   }
 
   .seg-toggle button.active {
-    background: var(--surface-2);
-    color: var(--ink);
+    background: var(--accent-soft);
+    color: var(--accent-strong);
     font-weight: 600;
   }
 
@@ -475,10 +483,11 @@
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
-    border-radius: 8px;
+    border-radius: 10px;
     border: 1px solid var(--line);
     background: var(--surface-2);
     text-align: left;
+    transition: border-color 120ms ease;
   }
 
   .subscribe:hover {
@@ -528,9 +537,40 @@
     stroke: var(--ok);
   }
 
+  .signout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 9px;
+    font-size: 0.88rem;
+    text-align: left;
+    transition: background 120ms ease;
+  }
+
+  .signout:hover {
+    background: var(--surface-2);
+  }
+
+  .signout .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .signout .signout-label {
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .signout:hover .signout-label {
+    color: var(--live);
+  }
+
   @media (max-width: 800px) {
     header {
-      padding: 12px 12px 18px;
+      padding: 10px 12px;
     }
 
     .spacer {

@@ -49,3 +49,13 @@ export interface HealthResponse {
   status: 'ok'
   instances: number
 }
+
+/**
+ * Current session. With auth disabled the API answers anonymously with empty
+ * strings; with auth enabled a missing session yields 401 instead.
+ */
+export interface MeDto {
+  name: string
+  /** per-user credential for /calendar.ics?token=… — empty when auth is disabled */
+  feedToken: string
+}

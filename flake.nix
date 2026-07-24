@@ -1,5 +1,5 @@
 {
-  description = "Merged Radarr/Sonarr calendar feed with a web UI";
+  description = "calthing — merged Radarr/Sonarr calendar feed with a web UI";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -18,9 +18,9 @@
       # The dev environment lives in devenv.nix (https://devenv.sh); this flake
       # is the packaging/NixOS entrypoint only.
       packages = forAllSystems (pkgs: rec {
-        arr-cal-proxy = pkgs.callPackage ./nix/package.nix { };
-        frontend = arr-cal-proxy.frontend;
-        default = arr-cal-proxy;
+        calthing = pkgs.callPackage ./nix/package.nix { };
+        frontend = calthing.frontend;
+        default = calthing;
       });
 
       checks = nixpkgs.lib.genAttrs systems (system: {

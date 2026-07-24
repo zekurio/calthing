@@ -1,6 +1,6 @@
 export type ThemeMode = 'light' | 'dark' | 'system'
 
-const STORAGE_KEY = 'theme'
+const STORAGE_KEY = 'calthing.theme'
 const media = matchMedia('(prefers-color-scheme: dark)')
 
 const stored = localStorage.getItem(STORAGE_KEY)
@@ -11,7 +11,7 @@ export const theme: { mode: ThemeMode } = $state({
 })
 
 /** Address-bar / PWA chrome color per resolved theme; keep in sync with --bg in app.css. */
-const THEME_COLORS = { light: '#f6f6f8', dark: '#0f0f13' }
+const THEME_COLORS = { light: '#f1f3f5', dark: '#141619' }
 
 function apply(): void {
   const resolved = theme.mode === 'system' ? (media.matches ? 'dark' : 'light') : theme.mode

@@ -106,7 +106,7 @@ export function generateCalendar(
   const timestamp = utcTimestamp(now)
   let output = 'BEGIN:VCALENDAR' + CRLF
   output += property('VERSION', '2.0')
-  output += property('PRODID', '-//arr-cal-proxy//EN')
+  output += property('PRODID', '-//calthing//EN')
   output += property('METHOD', 'PUBLISH')
   output += property('NAME', name)
   output += property('X-WR-CALNAME', name)

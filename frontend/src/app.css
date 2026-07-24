@@ -1,51 +1,66 @@
-@import '@fontsource/barlow-condensed/600.css';
-@import '@fontsource/barlow-condensed/700.css';
-@import '@fontsource-variable/instrument-sans';
+@import '@fontsource-variable/google-sans';
+@import '@fontsource/google-sans-code';
 
 /*
- * Monochrome base + Jellyfin duotone accent (purple → blue).
- * Grays carry the interface; --sonarr (blue family) and --radarr (purple
- * family) are the only chroma, reserved for source identity, and --gradient
- * marks the three signature moments: brand tile, today, watch button.
+ * Material-inspired calm theme shared with costthing: warm gray canvas, white
+ * elevated surfaces, a lavender accent and pastel supporting colors. Google
+ * Sans everywhere. --sonarr (blue) and --radarr (purple) carry source
+ * identity; --gradient marks the signature moments: brand tile, today, watch
+ * button.
  */
 :root {
-  --bg: #f6f6f8;
+  --bg: #f1f3f5;
   --surface: #ffffff;
-  --surface-2: #ededf1;
-  --line: #e3e3e9;
-  --ink: #17171d;
-  --muted: #676773;
-  --sonarr: #0090c4;
-  --radarr: #9a4fb5;
-  --accent: #00a4dc;
-  --accent-2: #aa5cc3;
-  --gradient: linear-gradient(135deg, var(--accent-2), var(--accent));
-  --ok: #1e8a5e;
-  --live: #d23f4e;
+  --surface-2: #e9edf1;
+  --line: #e2e6ea;
+  --ink: #33383e;
+  --muted: #7d858e;
+  --sonarr: #5f96c4;
+  --radarr: #a37cc9;
+  --accent: #b39ddb;
+  --accent-strong: #9273c9;
+  --accent-soft: #efe9f9;
+  --gradient: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  --topbar-bg: #eeeaf6;
+  --on-topbar: #3d334d;
+  --topbar-hover: rgb(61 51 77 / 0.08);
+  --topbar-tile: rgb(61 51 77 / 0.08);
+  --topbar-border: #e1d9ef;
+  --ok: #4da87a;
+  --live: #d96c6c;
   --on-accent: #ffffff;
-  --on-ink: #ffffff;
-  --font-display: 'Barlow Condensed', Impact, sans-serif;
-  --font-ui: 'Instrument Sans Variable', 'Instrument Sans', system-ui, sans-serif;
-  --font-mono: 'Barlow Condensed', ui-monospace, monospace;
+  --shadow-1: 0 1px 2px rgb(60 70 80 / 0.06), 0 2px 8px rgb(60 70 80 / 0.06);
+  --shadow-2: 0 4px 12px rgb(60 70 80 / 0.1), 0 12px 32px rgb(60 70 80 / 0.12);
+  --radius: 16px;
+  --font-display: 'Google Sans Variable', 'Google Sans', system-ui, sans-serif;
+  --font-ui: 'Google Sans Variable', 'Google Sans', system-ui, sans-serif;
+  --font-mono: 'Google Sans Code', ui-monospace, monospace;
   color-scheme: light;
 }
 
-/* Dark counterpart, tuned to Jellyfin's near-black; keep in sync with theme.svelte.ts. */
+/* Dark counterpart; keep --bg in sync with theme.svelte.ts. */
 :root[data-theme='dark'] {
-  --bg: #0f0f13;
-  --surface: #17171c;
-  --surface-2: #23232a;
-  --line: #27272f;
-  --ink: #ececf1;
-  --muted: #9a9aa6;
-  --sonarr: #33b6e4;
-  --radarr: #bd77d6;
-  --accent: #00a4dc;
-  --accent-2: #aa5cc3;
-  --ok: #43c188;
-  --live: #ee6f7c;
+  --bg: #141619;
+  --surface: #1e2226;
+  --surface-2: #2a2f34;
+  --line: #32383e;
+  --ink: #e7eaed;
+  --muted: #98a1aa;
+  --sonarr: #82b4d9;
+  --radarr: #bb99dd;
+  --accent: #b39ddb;
+  --accent-strong: #c9b8e8;
+  --accent-soft: #34294a;
+  --topbar-bg: #302a3d;
+  --on-topbar: #f1eef6;
+  --topbar-hover: rgb(255 255 255 / 0.1);
+  --topbar-tile: rgb(255 255 255 / 0.1);
+  --topbar-border: #40374e;
+  --ok: #8ccfab;
+  --live: #eb9c9c;
   --on-accent: #ffffff;
-  --on-ink: #101014;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px rgb(0 0 0 / 0.25);
+  --shadow-2: 0 4px 12px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.4);
   color-scheme: dark;
 }
 
@@ -90,9 +105,9 @@ a:focus-visible {
 
 .mono {
   font-family: var(--font-mono);
-  font-size: 0.92em;
+  font-size: 0.95em;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 @media (prefers-reduced-motion: reduce) {

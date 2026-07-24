@@ -59,7 +59,7 @@ Deno.test('Sonarr request and normalization match the ARR contract', async () =>
   assertEquals(events.length, 2, 'missing air date must be skipped')
   const first = events[0]
   assert(first !== undefined, 'first episode missing')
-  assertEquals(first.uid, 'sonarr-tv-101@arr-cal-proxy')
+  assertEquals(first.uid, 'sonarr-tv-101@calthing')
   assertEquals(first.source, 'sonarr')
   assertEquals(first.kind, 'episode')
   assertEquals(first.instance, 'tv')
@@ -99,8 +99,8 @@ Deno.test('Radarr request and release normalization match the ARR contract', asy
 
   assertEquals(events.length, 3, 'each in-window release should become an event')
   const byUid = new Map(events.map((event) => [event.uid, event]))
-  assertEquals(byUid.has('radarr-movies-42-physical@arr-cal-proxy'), false)
-  const cinema = byUid.get('radarr-movies-42-cinema@arr-cal-proxy')
+  assertEquals(byUid.has('radarr-movies-42-physical@calthing'), false)
+  const cinema = byUid.get('radarr-movies-42-cinema@calthing')
   assert(cinema !== undefined, 'cinema release missing')
   assertEquals(cinema.kind, 'movie-cinema')
   assertEquals(cinema.allDay, true)
@@ -110,7 +110,7 @@ Deno.test('Radarr request and release normalization match the ARR contract', asy
   assertEquals(cinema.overview, 'A movie about examples.')
   assertEquals(cinema.providerIds?.Tmdb, '24680')
 
-  const digital = byUid.get('radarr-movies-43-digital@arr-cal-proxy')
+  const digital = byUid.get('radarr-movies-43-digital@calthing')
   assert(digital !== undefined, 'digital release missing')
   assertEquals(digital.kind, 'movie-digital')
   assertEquals(digital.downloaded, true)

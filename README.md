@@ -1,6 +1,6 @@
-# arr-cal-proxy
+# calthing
 
-One calendar for your whole \*arr stack. arr-cal-proxy queries the calendar APIs of any number of
+One calendar for your whole \*arr stack. calthing queries the calendar APIs of any number of
 Radarr and Sonarr instances and serves:
 
 - **`/calendar.ics`** — a single merged iCal feed you can subscribe to from Google Calendar, Apple
@@ -18,7 +18,7 @@ on refresh.
 ## Running
 
 ```sh
-arr-cal-proxy -config config.yaml
+calthing -config config.yaml
 ```
 
 For a local source run, build the frontend first and start Deno:
@@ -45,7 +45,7 @@ calendar:
   name: 'Media Calendar' # calendar name shown by clients
 
 auth:
-  token: '' # if set, /calendar.ics requires ?token=<value>
+  secret: '' # if set, enables Jellyfin login + per-user feed tokens (see below)
 
 instances:
   - name: movies # unique, stable — part of event UIDs
@@ -74,27 +74,43 @@ jellyfin:
   api_key: ${JELLYFIN_API_KEY}
 ```
 
-When configured, arr-cal-proxy matches Sonarr episodes to Jellyfin by TVDB episode ID. Available
+When configured, calthing matches Sonarr episodes to Jellyfin by TVDB episode ID. Available
 episodes get a direct Jellyfin link in their event details. The API key and private URL stay on the
-server and are never returned to the browser.
+server and are never returned to the browser. `url` alone is enough for login; `public_url` and
+`api_key` additionally enable linking.
 
 `${VAR}` references are expanded from the environment at startup and fail loudly when unset — pair
-them with a systemd `EnvironmentFile` for secrets. `ARR_CAL_PROXY_LISTEN`, `ARR_CAL_PROXY_TOKEN`,
-and `ARR_CAL_PROXY_CONFIG` override their config counterparts. `ARR_CAL_PROXY_STATIC_DIR` can
+them with a systemd `EnvironmentFile` for secrets. `CALTHING_LISTEN` and
+`CALTHING_CONFIG` override their config counterparts. `CALTHING_STATIC_DIR` can
 override the frontend asset directory; packaged installations set it automatically.
 
-**Auth model:** the optional token guards only `/calendar.ics` (calendar clients cannot send
-headers, so it rides along as a query parameter). The web UI and `/api/*` are unauthenticated — put
-them behind your reverse proxy's auth if they should not be reachable. Renaming an instance changes
-its event UIDs, which re-creates those events in subscribed calendars; treat instance names as
-stable.
+## Auth model
+
+Setting `auth.secret` (any long random string, e.g. `openssl rand -hex 32`) turns on
+Jellyfin-backed auth:
+
+- **Web UI** — visitors sign in with their Jellyfin username and password
+  (`/Users/AuthenticateByName`). The Jellyfin access token is stored in an HttpOnly session cookie
+  and re-validated against Jellyfin (with a short cache), so revoking the session in Jellyfin also
+  signs the visitor out here. `/api/events` requires a session.
+- **Calendar feed** — calendar clients cannot log in, so each user gets a personal
+  `/calendar.ics?token=…` URL (shown behind the copy-link button). The token is
+  `<userId>.<HMAC-SHA256(secret, userId)>`: it grants access to the feed only, never to Jellyfin.
+  Rotating `auth.secret` invalidates every feed URL at once.
+
+With `auth.secret` empty, the calendar and feed are public — put them behind your reverse proxy's
+auth if they should not be reachable. Renaming an instance changes its event UIDs, which re-creates
+those events in subscribed calendars; treat instance names as stable.
 
 ## Endpoints
 
 | Route               | Description                                                                 |
 | ------------------- | --------------------------------------------------------------------------- |
-| `GET /calendar.ics` | Merged iCal feed. Optional `?start=YYYY-MM-DD&end=YYYY-MM-DD`, `?token=`    |
+| `GET /calendar.ics` | Merged iCal feed. Optional `?start=YYYY-MM-DD&end=YYYY-MM-DD`; requires the per-user `?token=` when auth is enabled |
 | `GET /api/events`   | JSON events and per-instance status, with the same `start`/`end` parameters |
+| `POST /api/auth`    | Jellyfin login; sets the session cookie                                     |
+| `GET /api/me`       | Current session and personal feed token                                     |
+| `POST /api/logout`  | Ends the session                                                            |
 | `GET /api/health`   | Liveness probe                                                              |
 | `GET /`             | Web calendar                                                                |
 
@@ -111,20 +127,20 @@ nix run . -- -config config.yaml
 ```
 
 The package builds the Vite frontend separately, installs the Deno source and locked dependencies
-into the Nix store, and exposes the same `arr-cal-proxy -config ...` executable contract.
+into the Nix store, and exposes the same `calthing -config ...` executable contract.
 
 NixOS module:
 
 ```nix
 {
-  inputs.arr-cal-proxy.url = "github:zekurio/arr-cal-proxy";
+  inputs.calthing.url = "github:zekurio/calthing";
 
   # in a nixosConfiguration:
-  imports = [ inputs.arr-cal-proxy.nixosModules.default ];
+  imports = [ inputs.calthing.nixosModules.default ];
 
-  services.arr-cal-proxy = {
+  services.calthing = {
     enable = true;
-    environmentFile = "/run/secrets/arr-cal-proxy.env"; # RADARR_API_KEY=...
+    environmentFile = "/run/secrets/calthing.env"; # RADARR_API_KEY=...
     settings = {
       listen = ":8080";
       instances = [

@@ -31,8 +31,8 @@ function event(uid: string, start: string): CalendarEvent {
 }
 
 Deno.test('stable UIDs and episode labels match the Go format', () => {
-  assertEquals(episodeUid('living-room', 42), 'sonarr-living-room-42@arr-cal-proxy')
-  assertEquals(movieUid('movies', 7, 'digital'), 'radarr-movies-7-digital@arr-cal-proxy')
+  assertEquals(episodeUid('living-room', 42), 'sonarr-living-room-42@calthing')
+  assertEquals(movieUid('movies', 7, 'digital'), 'radarr-movies-7-digital@calthing')
   assertEquals(sxxEyy({ season: 2, episode: 5 }), 'S02E05')
   assertEquals(sxxEyy({ season: 123, episode: 4 }), 'S123E04')
 })

@@ -2,7 +2,7 @@ import type { Kind } from '../../../shared/api.ts'
 
 export type Locale = 'de' | 'en'
 
-const STORAGE_KEY = 'locale'
+const STORAGE_KEY = 'calthing.locale'
 
 function initialLocale(): Locale {
   const stored = localStorage.getItem(STORAGE_KEY)
@@ -61,6 +61,16 @@ const messages = {
     unreachableOne: '{names} ist nicht erreichbar — angezeigt werden die verfügbaren Quellen.',
     unreachableMany: '{names} sind nicht erreichbar — angezeigt werden die verfügbaren Quellen.',
     loadFailed: 'Termine konnten nicht geladen werden ({status})',
+    signInHint: 'Melde dich mit deinem Jellyfin-Konto an.',
+    username: 'Benutzername',
+    password: 'Passwort',
+    signIn: 'Anmelden',
+    signingIn: 'einen Moment…',
+    wrongCredentials: 'Falsche Zugangsdaten — noch einmal versuchen.',
+    jellyfinUnreachable: 'Jellyfin ist gerade nicht erreichbar.',
+    signInFailed: 'Etwas ist schiefgelaufen.',
+    account: 'Konto',
+    signOut: 'Abmelden',
   },
   en: {
     programme: 'Schedule',
@@ -99,6 +109,16 @@ const messages = {
     unreachableOne: '{names} is unreachable — showing the available sources.',
     unreachableMany: '{names} are unreachable — showing the available sources.',
     loadFailed: 'Loading events failed ({status})',
+    signInHint: 'Sign in with your Jellyfin account.',
+    username: 'Username',
+    password: 'Password',
+    signIn: 'Sign in',
+    signingIn: 'one moment…',
+    wrongCredentials: 'Wrong username or password — try again.',
+    jellyfinUnreachable: 'Jellyfin is unreachable right now.',
+    signInFailed: 'Something went wrong.',
+    account: 'Account',
+    signOut: 'Sign out',
   },
 } as const satisfies Record<Locale, Record<string, string>>
 

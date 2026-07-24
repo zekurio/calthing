@@ -6,8 +6,8 @@
   },
   "imports": {
     "@elysiajs/eden": "npm:@elysiajs/eden@1.4.9",
-    "@fontsource-variable/instrument-sans": "npm:@fontsource-variable/instrument-sans@^5.2.8",
-    "@fontsource/barlow-condensed": "npm:@fontsource/barlow-condensed@^5.2.8",
+    "@fontsource-variable/google-sans": "npm:@fontsource-variable/google-sans@^5.3.0",
+    "@fontsource/google-sans-code": "npm:@fontsource/google-sans-code@^5.3.0",
     "@tsconfig/svelte": "npm:@tsconfig/svelte@5.0.8",
     "@types/deno": "npm:@types/deno@2.7.0",
     "@std/assert": "jsr:@std/assert@1.0.14",

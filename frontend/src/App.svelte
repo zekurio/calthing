@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { createQuery } from '@tanstack/svelte-query'
-  import type { EventDto } from '../../shared/api.ts'
-  import { fetchEvents } from './lib/api'
+  import { createQuery, useQueryClient } from '@tanstack/svelte-query'
+  import type { EventDto, MeDto } from '../../shared/api.ts'
+  import { ApiError, fetchEvents, fetchMe, logout } from './lib/api'
+  import Gate from './components/Gate.svelte'
   import { addDays, dayLabel, eventDay, monthGrid, sameDay, startOfWeek, ymd } from './lib/dates'
   import Header from './components/Header.svelte'
   import MonthGrid from './components/MonthGrid.svelte'
@@ -19,17 +20,22 @@
 
   const initialView = (): View => {
     const fromURL = new URLSearchParams(location.search).get('view')
-    const v = fromURL ?? localStorage.getItem('view')
+    const v = fromURL ?? localStorage.getItem('calthing.view')
     return v === 'agenda' || v === 'week' || v === 'month' ? v : 'month'
   }
   let view = $state<View>(initialView())
   let viewDate = $state(new Date())
-  let hidden = $state(new Set<string>(JSON.parse(localStorage.getItem('hiddenInstances') ?? '[]')))
+  let session = $state<'loading' | 'gate' | 'ready'>('loading')
+  let me = $state<MeDto | null>(null)
+  const queryClient = useQueryClient()
+  let hidden = $state(
+    new Set<string>(JSON.parse(localStorage.getItem('calthing.hiddenInstances') ?? '[]')),
+  )
   let modal = $state<ModalState>(null)
 
   $effect(() => {
-    localStorage.setItem('view', view)
-    localStorage.setItem('hiddenInstances', JSON.stringify([...hidden]))
+    localStorage.setItem('calthing.view', view)
+    localStorage.setItem('calthing.hiddenInstances', JSON.stringify([...hidden]))
   })
 
   const range = $derived.by(() => {
@@ -60,7 +66,40 @@
     queryKey: ['events', range.start, range.end] as const,
     queryFn: ({ queryKey: [, start, end], signal }) => fetchEvents(start, end, signal),
     placeholderData: (previous) => previous,
+    enabled: session === 'ready',
   }))
+
+  fetchMe().then(
+    (resolved) => {
+      me = resolved
+      session = 'ready'
+    },
+    (error: unknown) => {
+      me = null
+      session = error instanceof ApiError && error.status === 401 ? 'gate' : 'ready'
+    },
+  )
+
+  // an expired or revoked session surfaces as a 401 from the events endpoint
+  $effect(() => {
+    const error = eventsQuery.error
+    if (error instanceof ApiError && error.status === 401) {
+      me = null
+      session = 'gate'
+    }
+  })
+
+  function unlock(resolved: MeDto) {
+    me = resolved
+    session = 'ready'
+    queryClient.invalidateQueries({ queryKey: ['events'] })
+  }
+
+  async function signOut() {
+    await logout()
+    me = null
+    session = 'gate'
+  }
 
   const events = $derived(eventsQuery.data?.events ?? [])
   const instances = $derived(eventsQuery.data?.instances ?? [])
@@ -70,6 +109,16 @@
   const error = $derived(eventsQuery.error?.message ?? '')
   const visible = $derived(events.filter((e) => !hidden.has(e.instance)))
   const failed = $derived(instances.filter((i) => !i.ok))
+  const failedNotice = $derived(
+    failed.length > 0
+      ? t(failed.length === 1 ? 'unreachableOne' : 'unreachableMany', {
+        names: failed.map((i) => i.name).join(', '),
+      })
+      : '',
+  )
+  // toasts are dismissed per message — a changed failure set surfaces them again
+  let dismissedNotice = $state('')
+  let dismissedError = $state('')
   const dayEvents = $derived.by(() => {
     const m = modal
     if (m?.kind !== 'day') return []
@@ -89,72 +138,89 @@
   }
 </script>
 
-<Header
-  {view}
-  {viewDate}
-  {instances}
-  {hidden}
-  {loading}
-  {branding}
-  {instanceColors}
-  onview={(v) => (view = v)}
-  onnavigate={(d) => (viewDate = d)}
-  ontoggleinstance={toggleInstance}
-/>
+{#if session === 'gate'}
+  <Gate onunlock={unlock} />
+{:else if session === 'ready'}
+  <Header
+    {view}
+    {viewDate}
+    {instances}
+    {hidden}
+    {loading}
+    {branding}
+    {instanceColors}
+    {me}
+    onview={(v) => (view = v)}
+    onnavigate={(d) => (viewDate = d)}
+    ontoggleinstance={toggleInstance}
+    onsignout={signOut}
+  />
 
-{#if failed.length > 0}
-  <div class="notice" role="status">
-    {t(failed.length === 1 ? 'unreachableOne' : 'unreachableMany', {
-      names: failed.map((i) => i.name).join(', '),
-    })}
+  <div class="toasts">
+    {#if failedNotice && failedNotice !== dismissedNotice}
+      <div class="toast" role="status">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="text">{failedNotice}</span>
+        <button
+          class="dismiss"
+          aria-label={t('close')}
+          onclick={() => (dismissedNotice = failedNotice)}
+        >×</button>
+      </div>
+    {/if}
+    {#if error && error !== dismissedError}
+      <div class="toast" role="alert">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="text">{error}</span>
+        <button class="dismiss" aria-label={t('close')} onclick={() => (dismissedError = error)}
+        >×</button>
+      </div>
+    {/if}
   </div>
-{/if}
-{#if error}
-  <div class="notice error" role="alert">{error}</div>
-{/if}
 
-<main>
-  {#if view === 'month'}
-    <MonthGrid
-      {viewDate}
-      events={visible}
-      {instanceColors}
-      onselect={(e) => (modal = { kind: 'event', event: e })}
-      onselectday={(date) => (modal = { kind: 'day', date })}
-    />
-  {:else if view === 'week'}
-    <WeekGrid
-      {viewDate}
-      events={visible}
-      {instanceColors}
-      onselect={(e) => (modal = { kind: 'event', event: e })}
-    />
-  {:else}
-    <AgendaList
-      events={visible}
-      {instanceColors}
-      onselect={(e) => (modal = { kind: 'event', event: e })}
-    />
+  <main>
+    {#if view === 'month'}
+      <MonthGrid
+        {viewDate}
+        events={visible}
+        {instanceColors}
+        onselect={(e) => (modal = { kind: 'event', event: e })}
+        onselectday={(date) => (modal = { kind: 'day', date })}
+      />
+    {:else if view === 'week'}
+      <WeekGrid
+        {viewDate}
+        events={visible}
+        {instanceColors}
+        onselect={(e) => (modal = { kind: 'event', event: e })}
+      />
+    {:else}
+      <AgendaList
+        events={visible}
+        {instanceColors}
+        onselect={(e) => (modal = { kind: 'event', event: e })}
+      />
+    {/if}
+  </main>
+
+  {#if modal?.kind === 'event'}
+    <Modal onclose={() => (modal = null)}>
+      <EventDetail event={modal.event} color={instanceColors[modal.event.instance]} />
+    </Modal>
+  {:else if modal?.kind === 'day'}
+    <Modal onclose={() => (modal = null)}>
+      <div class="day-list">
+        <h2>{dayLabel(modal.date)}</h2>
+        {#each dayEvents as e (e.uid)}
+          <EventChip
+            event={e}
+            color={instanceColors[e.instance]}
+            onselect={() => (modal = { kind: 'event', event: e })}
+          />
+        {/each}
+      </div>
+    </Modal>
   {/if}
-</main>
-
-{#if modal?.kind === 'event'}
-  <Modal onclose={() => (modal = null)}>
-    <EventDetail event={modal.event} color={instanceColors[modal.event.instance]} />
-  </Modal>
-{:else if modal?.kind === 'day'}
-  <Modal onclose={() => (modal = null)}>
-    <div class="day-list">
-      <h2>{dayLabel(modal.date)}</h2>
-      {#each dayEvents as e (e.uid)}
-        <EventChip
-          event={e}
-          color={instanceColors[e.instance]}
-          onselect={() => (modal = { kind: 'event', event: e })}
-        />
-      {/each}
-    </div>
-  </Modal>
 {/if}
 
 <style>
@@ -169,17 +235,74 @@
     margin: 0 auto;
   }
 
-  .notice {
-    max-width: 1400px;
-    width: 100%;
-    margin: 0 auto 8px;
-    padding: 8px 16px;
-    color: var(--live);
-    font-size: 0.9rem;
+  .toasts {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: min(520px, calc(100vw - 32px));
+    pointer-events: none;
   }
 
-  .notice.error {
-    color: var(--live);
+  .toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 100%;
+    padding: 10px 10px 10px 14px;
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--shadow-2);
+    font-size: 0.88rem;
+    animation: toast-in 160ms ease;
+  }
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .toast .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--live);
+    flex-shrink: 0;
+  }
+
+  .toast .text {
+    min-width: 0;
+  }
+
+  .toast .dismiss {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border-radius: 99px;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  .toast .dismiss:hover {
+    background: var(--surface-2);
+    color: var(--ink);
   }
 
   .day-list {

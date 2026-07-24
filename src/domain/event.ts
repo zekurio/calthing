@@ -20,7 +20,7 @@ export interface CalendarEvent {
 }
 
 export function episodeUid(instance: string, episodeId: number): string {
-  return `sonarr-${instance}-${episodeId}@arr-cal-proxy`
+  return `sonarr-${instance}-${episodeId}@calthing`
 }
 
 export function movieUid(
@@ -28,7 +28,7 @@ export function movieUid(
   movieId: number,
   release: 'cinema' | 'digital' | 'physical',
 ): string {
-  return `radarr-${instance}-${movieId}-${release}@arr-cal-proxy`
+  return `radarr-${instance}-${movieId}-${release}@calthing`
 }
 
 export function sxxEyy(event: Pick<CalendarEvent, 'season' | 'episode'>): string {

@@ -23,7 +23,7 @@ export interface Config {
     availabilityDelayMs: number
   }
   auth: {
-    token: string
+    secret: string
   }
   branding: {
     name: string
@@ -44,7 +44,7 @@ const DEFAULT_TTL_MS = 10 * 60 * 1000
 const DEFAULT_PAST_DAYS = 30
 const DEFAULT_FUTURE_DAYS = 90
 const DEFAULT_CALENDAR_NAME = 'Media Calendar'
-const DEFAULT_BRAND_NAME = 'Jellyfin'
+const DEFAULT_BRAND_NAME = 'calthing'
 
 const DURATION_UNITS: Readonly<Record<string, number>> = {
   ns: 1 / 1_000_000,
@@ -172,15 +172,25 @@ function validate(config: Config): void {
     throw new Error('config: calendar.availability_delay must be >= 0')
   }
 
-  const jellyfinValues = [config.jellyfin.url, config.jellyfin.publicUrl, config.jellyfin.apiKey]
-  if (jellyfinValues.some(Boolean) && jellyfinValues.some((value) => !value)) {
-    throw new Error('config: jellyfin.url, public_url, and api_key must be set together')
+  const linkValues = [config.jellyfin.publicUrl, config.jellyfin.apiKey]
+  if (linkValues.some(Boolean)) {
+    if (!linkValues.every(Boolean)) {
+      throw new Error('config: jellyfin.public_url and api_key must be set together')
+    }
+    if (!config.jellyfin.url) {
+      throw new Error('config: jellyfin.url is required when public_url and api_key are set')
+    }
   }
-  for (const [path, value] of [
-    ['branding.icon_url', config.branding.iconUrl],
-    ['jellyfin.url', config.jellyfin.url],
-    ['jellyfin.public_url', config.jellyfin.publicUrl],
-  ] as const) {
+  if (config.auth.secret !== '' && config.jellyfin.url === '') {
+    throw new Error('config: auth.secret requires jellyfin.url — login uses Jellyfin accounts')
+  }
+  for (
+    const [path, value] of [
+      ['branding.icon_url', config.branding.iconUrl],
+      ['jellyfin.url', config.jellyfin.url],
+      ['jellyfin.public_url', config.jellyfin.publicUrl],
+    ] as const
+  ) {
     if (!value) continue
     try {
       new URL(value)
@@ -281,7 +291,7 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
       name: stringValue(calendar.name, DEFAULT_CALENDAR_NAME, 'calendar.name'),
       availabilityDelayMs,
     },
-    auth: { token: stringValue(auth.token, '', 'auth.token') },
+    auth: { secret: stringValue(auth.secret, '', 'auth.secret') },
     branding: {
       name: stringValue(branding.name, DEFAULT_BRAND_NAME, 'branding.name'),
       iconUrl: stringValue(branding.icon_url, '', 'branding.icon_url'),
@@ -296,8 +306,7 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
     instances: (root.instances ?? []).map(parseInstance),
   }
 
-  if (env.ARR_CAL_PROXY_LISTEN) config.listen = env.ARR_CAL_PROXY_LISTEN
-  if (env.ARR_CAL_PROXY_TOKEN) config.auth.token = env.ARR_CAL_PROXY_TOKEN
+  if (env.CALTHING_LISTEN) config.listen = env.CALTHING_LISTEN
 
   validate(config)
   return config

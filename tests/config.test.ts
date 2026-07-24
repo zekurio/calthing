@@ -10,8 +10,6 @@ calendar:
   future_days: 14
   name: Test Calendar
   availability_delay: 45m
-auth:
-  token: secret
 instances:
   - name: movies
     type: radarr
@@ -35,7 +33,7 @@ Deno.test('parseConfig loads explicit values', () => {
     name: 'Test Calendar',
     availabilityDelayMs: 45 * 60 * 1000,
   })
-  assertEquals(config.auth.token, 'secret')
+  assertEquals(config.auth.secret, '')
   assertEquals(config.instances, [
     {
       name: 'movies',
@@ -74,9 +72,9 @@ instances:
     name: 'Media Calendar',
     availabilityDelayMs: 0,
   })
-  assertEquals(config.auth.token, '')
+  assertEquals(config.auth.secret, '')
   assertEquals(config.branding, {
-    name: 'Jellyfin',
+    name: 'calthing',
     iconUrl: '',
     pageTitle: '',
     description: '',
@@ -88,7 +86,8 @@ instances:
 })
 
 Deno.test('parseConfig loads branding and private/public Jellyfin URLs', () => {
-  const config = parseConfig(`${validYaml}
+  const config = parseConfig(
+    `${validYaml}
 branding:
   name: Friendsflix
   icon_url: https://static.example/ticket.svg
@@ -98,7 +97,9 @@ jellyfin:
   url: http://jellyfin.internal:8096
   public_url: https://watch.example
   api_key: jellyfin-key
-`, {})
+`,
+    {},
+  )
 
   assertEquals(config.branding, {
     name: 'Friendsflix',
@@ -113,11 +114,39 @@ jellyfin:
   })
 })
 
-Deno.test('parseConfig rejects partial Jellyfin configuration', () => {
+Deno.test('parseConfig accepts a Jellyfin URL alone for login but rejects partial linking config', () => {
+  const authOnly = parseConfig(
+    `${validYaml}
+auth:
+  secret: feed-secret
+jellyfin: {url: 'http://jellyfin:8096'}`,
+    {},
+  )
+  assertEquals(authOnly.auth.secret, 'feed-secret')
+  assertEquals(authOnly.jellyfin, { url: 'http://jellyfin:8096', publicUrl: '', apiKey: '' })
+
   assertThrows(
-    () => parseConfig(`${validYaml}\njellyfin: {url: http://jellyfin:8096}`, {}),
+    () => parseConfig(`${validYaml}\njellyfin: {public_url: 'https://watch.example'}`, {}),
     Error,
-    'jellyfin.url, public_url, and api_key must be set together',
+    'jellyfin.public_url and api_key must be set together',
+  )
+  assertThrows(
+    () =>
+      parseConfig(
+        `${validYaml}
+jellyfin: {public_url: 'https://watch.example', api_key: k}`,
+        {},
+      ),
+    Error,
+    'jellyfin.url is required when public_url and api_key are set',
+  )
+})
+
+Deno.test('parseConfig rejects an auth secret without a Jellyfin URL to log in against', () => {
+  assertThrows(
+    () => parseConfig(`${validYaml}\nauth: {secret: feed-secret}`, {}),
+    Error,
+    'auth.secret requires jellyfin.url',
   )
 })
 
@@ -125,8 +154,6 @@ Deno.test('parseConfig expands environment references and applies non-empty over
   const config = parseConfig(
     `
 listen: ':9090'
-auth:
-  token: yaml-token
 instances:
   - name: tv
     type: sonarr
@@ -135,21 +162,17 @@ instances:
 `,
     {
       TEST_ARR_KEY: 'expanded-key',
-      ARR_CAL_PROXY_LISTEN: ':7777',
-      ARR_CAL_PROXY_TOKEN: 'env-token',
+      CALTHING_LISTEN: ':7777',
     },
   )
 
   assertEquals(config.instances[0]?.apiKey, 'expanded-key')
   assertEquals(config.listen, ':7777')
-  assertEquals(config.auth.token, 'env-token')
 
   const noEmptyOverride = parseConfig(validYaml, {
-    ARR_CAL_PROXY_LISTEN: '',
-    ARR_CAL_PROXY_TOKEN: '',
+    CALTHING_LISTEN: '',
   })
   assertEquals(noEmptyOverride.listen, ':9090')
-  assertEquals(noEmptyOverride.auth.token, 'secret')
 })
 
 Deno.test('parseConfig reports every missing environment reference', () => {

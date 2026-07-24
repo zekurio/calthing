@@ -42,8 +42,8 @@ export function parseArgs(
   args: readonly string[],
   env: Readonly<Record<string, string | undefined>> = Deno.env.toObject(),
 ): CliOptions {
-  let configPath = env.ARR_CAL_PROXY_CONFIG || 'config.yaml'
-  const staticDir = env.ARR_CAL_PROXY_STATIC_DIR || 'frontend/dist'
+  let configPath = env.CALTHING_CONFIG || 'config.yaml'
+  const staticDir = env.CALTHING_STATIC_DIR || 'frontend/dist'
 
   for (let index = 0; index < args.length; index++) {
     const argument = args[index] as string
@@ -81,6 +81,8 @@ function installShutdownSignals(controller: AbortController): () => void {
 
 export function buildApp(config: Config, staticDir?: string) {
   const jellyfin = config.jellyfin.url ? new JellyfinClient(config.jellyfin) : undefined
+  // Linking needs the API key and public URL; login only needs the private URL.
+  const linker = config.jellyfin.apiKey && config.jellyfin.publicUrl ? jellyfin : undefined
   return createApp({
     config,
     fetcher: new Fetcher(
@@ -88,9 +90,10 @@ export function buildApp(config: Config, staticDir?: string) {
       config.cache.ttlMs,
       undefined,
       undefined,
-      jellyfin,
+      linker,
       config.calendar.availabilityDelayMs,
     ),
+    auth: config.auth.secret !== '' ? jellyfin : undefined,
     staticDir,
   })
 }

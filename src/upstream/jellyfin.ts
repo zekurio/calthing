@@ -8,6 +8,27 @@ export interface JellyfinConfig {
 
 export type HttpFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
+export interface JellyfinUser {
+  id: string
+  name: string
+}
+
+interface JellyfinUserDto {
+  Id?: string
+  Name?: string
+}
+
+const AUTH_HEADER =
+  'MediaBrowser Client="calthing", Device="calthing", DeviceId="calthing", Version="1.0"'
+
+/** how long a resolved session-token → user mapping is trusted before re-asking Jellyfin */
+const USER_CACHE_MS = 60_000
+
+function toUser(dto: JellyfinUserDto | undefined): JellyfinUser | null {
+  if (!dto?.Id || !dto.Name) return null
+  return { id: dto.Id, name: dto.Name }
+}
+
 interface JellyfinItem {
   Id?: string
   Name?: string
@@ -36,10 +57,74 @@ function itemUrl(publicUrl: string, id: string): string {
 export class JellyfinClient {
   readonly #config: JellyfinConfig
   readonly #fetch: HttpFetch
+  readonly #userCache = new Map<string, { user: JellyfinUser; expires: number }>()
 
   constructor(config: JellyfinConfig, fetchFn: HttpFetch = fetch) {
     this.#config = config
     this.#fetch = fetchFn
+  }
+
+  /** Logs in via /Users/AuthenticateByName. Returns null on wrong credentials. */
+  async authenticate(
+    username: string,
+    password: string,
+  ): Promise<{ token: string; user: JellyfinUser } | null> {
+    const response = await this.#fetch(endpoint(this.#config.url, '/Users/AuthenticateByName'), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: AUTH_HEADER,
+      },
+      body: JSON.stringify({ Username: username, Pw: password }),
+    })
+    if (response.status === 401 || response.status === 403) {
+      await response.body?.cancel()
+      return null
+    }
+    if (!response.ok) {
+      const body = (await response.text()).slice(0, 512)
+      throw new Error(`jellyfin: /Users/AuthenticateByName returned ${response.status}: ${body}`)
+    }
+    const payload = await response.json() as { AccessToken?: string; User?: JellyfinUserDto }
+    const user = toUser(payload.User)
+    if (!payload.AccessToken || user === null) {
+      throw new Error('jellyfin: auth response is missing the access token or user')
+    }
+    this.#userCache.set(payload.AccessToken, { user, expires: Date.now() + USER_CACHE_MS })
+    return { token: payload.AccessToken, user }
+  }
+
+  /** Resolves a session token to its user; null if the token is no longer valid. */
+  async user(token: string): Promise<JellyfinUser | null> {
+    const hit = this.#userCache.get(token)
+    if (hit && hit.expires > Date.now()) return hit.user
+    const response = await this.#fetch(endpoint(this.#config.url, '/Users/Me'), {
+      headers: { Accept: 'application/json', 'X-Emby-Token': token },
+    })
+    if (!response.ok) {
+      await response.body?.cancel()
+      this.#userCache.delete(token)
+      return null
+    }
+    const user = toUser(await response.json() as JellyfinUserDto)
+    if (user === null) return null
+    this.#userCache.set(token, { user, expires: Date.now() + USER_CACHE_MS })
+    return user
+  }
+
+  /** Invalidates the session on the Jellyfin side (best effort). */
+  async logout(token: string): Promise<void> {
+    this.#userCache.delete(token)
+    try {
+      const response = await this.#fetch(endpoint(this.#config.url, '/Sessions/Logout'), {
+        method: 'POST',
+        headers: { 'X-Emby-Token': token },
+      })
+      await response.body?.cancel()
+    } catch {
+      // Jellyfin unreachable — the cookie is cleared either way
+    }
   }
 
   async addLinks(events: CalendarEvent[]): Promise<void> {

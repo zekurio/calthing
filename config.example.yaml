@@ -1,4 +1,4 @@
-# arr-cal-proxy example configuration.
+# calthing example configuration.
 # Copy to config.yaml and adjust. ${VAR} references are expanded from the
 # environment at load time; loading fails if a referenced variable is unset.
 
@@ -18,8 +18,13 @@ calendar:
   name: 'Media Calendar'
 
 auth:
-  # If set, /calendar.ics requires ?token=<value>. Leave empty to disable.
-  token: ''
+  # Optional: enables Jellyfin login for the web UI and per-user calendar
+  # feed tokens. Users sign in with their Jellyfin account; each user gets a
+  # personal /calendar.ics?token=… URL signed with this secret. Requires
+  # jellyfin.url below. Use a long random string (e.g. `openssl rand -hex 32`);
+  # rotating it invalidates every feed URL at once. Leave empty for a public
+  # calendar without login.
+  secret: ''
 
 instances:
   - name: movies # unique; part of event UIDs — treat as stable, renaming re-creates events in subscribed calendars
@@ -35,13 +40,15 @@ instances:
 # Branding shown above the web calendar. When icon_url is empty, a built-in
 # cinema-ticket icon is used. The URL may point to an SVG or raster image.
 branding:
-  name: Jellyfin
+  name: calthing
   icon_url: ''
-  page_title: 'Jellyfin · Was läuft'
+  page_title: 'calthing · Was läuft'
   description: 'Das gemeinsame Film- und Serienprogramm.'
 
-# Optional Jellyfin integration. `url` is used only by arr-cal-proxy for API
-# calls; `public_url` is used for links opened by calendar visitors.
+# Optional Jellyfin integration. `url` alone is enough for login (auth.secret);
+# `public_url` and `api_key` additionally enable linking events to Jellyfin
+# items. `url` is used only server-side; `public_url` is used for links opened
+# by calendar visitors.
 # jellyfin:
 #   url: http://127.0.0.1:8096
 #   public_url: https://jellyfin.example.com
