@@ -35,6 +35,8 @@
 
   let copied = $state(false)
   let settingsOpen = $state(false)
+  let brandIconFailed = $state(false)
+  let avatarFailed = $state(false)
   const radarrInstances = $derived(instances.filter((instance) => instance.type === 'radarr'))
   const sonarrInstances = $derived(instances.filter((instance) => instance.type === 'sonarr'))
   const sourceGroups = $derived(
@@ -70,8 +72,8 @@
 <header>
   <div class="brand">
     <span class="tile" aria-hidden="true">
-      {#if branding.iconUrl}
-        <img src={branding.iconUrl} alt="" />
+      {#if branding.iconUrl && !brandIconFailed}
+        <img src={branding.iconUrl} alt="" onerror={() => (brandIconFailed = true)} />
       {:else}
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d={TICKET_OUTLINE} />
@@ -112,11 +114,15 @@
 
   <details class="user-menu" bind:open={settingsOpen}>
     <summary class="avatar-btn" aria-label={t('menu')} title={t('menu')}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M18 20a6 6 0 0 0-12 0" />
-        <circle cx="12" cy="10" r="4" />
-        <circle cx="12" cy="12" r="10" />
-      </svg>
+      {#if me?.avatarUrl && !avatarFailed}
+        <img class="avatar-img" src={me.avatarUrl} alt="" onerror={() => (avatarFailed = true)} />
+      {:else}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M18 20a6 6 0 0 0-12 0" />
+          <circle cx="12" cy="10" r="4" />
+          <circle cx="12" cy="12" r="10" />
+        </svg>
+      {/if}
     </summary>
     <div class="menu">
       {#if me?.name}
@@ -366,6 +372,13 @@
     stroke-linejoin: round;
   }
 
+  .avatar-img {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
   .menu {
     position: absolute;
     right: 0;
@@ -598,21 +611,29 @@
   @media (max-width: 800px) {
     header {
       padding: 8px 12px;
+      row-gap: 10px;
     }
 
-    .spacer {
-      display: none;
+    /* row 1: brand … avatar | row 2: view toggle | row 3: month nav */
+    .view-toggle {
+      order: 3;
+      width: 100%;
+    }
+
+    .view-toggle button {
+      flex: 1;
     }
 
     .month-nav {
-      order: 3;
+      order: 4;
       width: 100%;
       margin-left: 0;
       justify-content: space-between;
     }
 
-    .view-toggle {
-      margin-left: auto;
+    .month-label {
+      min-width: 0;
+      text-align: right;
     }
   }
 </style>

@@ -59,10 +59,23 @@ function copyConfig(feedSecret = ''): Config {
 const stubAuth: AuthClient = {
   async authenticate(username, password) {
     if (username !== 'alice' || password !== 'right') return null
-    return { token: 'jf-token', user: { id: 'user-1', name: 'alice' } }
+    return {
+      token: 'jf-token',
+      user: {
+        id: 'user-1',
+        name: 'alice',
+        avatarUrl: 'https://jf.example/Users/user-1/Images/Primary?tag=t1',
+      },
+    }
   },
   async user(token) {
-    return token === 'jf-token' ? { id: 'user-1', name: 'alice' } : null
+    return token === 'jf-token'
+      ? {
+        id: 'user-1',
+        name: 'alice',
+        avatarUrl: 'https://jf.example/Users/user-1/Images/Primary?tag=t1',
+      }
+      : null
   },
   async logout() {},
 }
@@ -243,6 +256,7 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
   assertStringIncludes(cookie, 'HttpOnly')
   const body = await login.json()
   assertEquals(body.name, 'alice')
+  assertEquals(body.avatarUrl, 'https://jf.example/Users/user-1/Images/Primary?tag=t1')
   assertEquals(await verifyFeedToken('feed-secret', body.feedToken), 'user-1')
 
   const anonymous = await request(app, '/api/events')
@@ -282,7 +296,7 @@ Deno.test('auth disabled keeps the API and feed public and /api/me anonymous', a
   assertEquals((await request(app, '/calendar.ics')).status, 200)
   const me = await request(app, '/api/me')
   assertEquals(me.status, 200)
-  assertEquals(await me.json(), { name: '', feedToken: '' })
+  assertEquals(await me.json(), { name: '', feedToken: '', avatarUrl: '' })
   const login = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

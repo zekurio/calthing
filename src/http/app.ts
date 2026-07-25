@@ -17,6 +17,7 @@ export interface AppConfig {
 export interface AuthUser {
   id: string
   name: string
+  avatarUrl: string
 }
 
 /** Jellyfin-backed login; see src/upstream/jellyfin.ts for the production client. */
@@ -105,6 +106,7 @@ const healthResponseSchema = t.Object({
 const meResponseSchema = t.Object({
   name: t.String(),
   feedToken: t.String(),
+  avatarUrl: t.String(),
 })
 
 const loginBodySchema = t.Object({
@@ -273,6 +275,7 @@ export function createApp(dependencies: AppDependencies) {
       return {
         name: session.user.name,
         feedToken: await signFeedToken(config.calendar.feedSecret, session.user.id),
+        avatarUrl: session.user.avatarUrl,
       }
     }, {
       body: loginBodySchema,
@@ -294,7 +297,7 @@ export function createApp(dependencies: AppDependencies) {
     })
     .get('/api/me', async ({ headers, set, status }) => {
       set.headers['content-type'] = 'application/json; charset=utf-8'
-      if (!authEnabled) return { name: '', feedToken: '' }
+      if (!authEnabled) return { name: '', feedToken: '', avatarUrl: '' }
       const user = await currentUser(headers.cookie)
       if (user === null) {
         Object.assign(set.headers, errorHeaders)
@@ -303,6 +306,7 @@ export function createApp(dependencies: AppDependencies) {
       return {
         name: user.name,
         feedToken: await signFeedToken(config.calendar.feedSecret, user.id),
+        avatarUrl: user.avatarUrl,
       }
     }, {
       response: {

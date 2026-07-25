@@ -11,11 +11,14 @@ export type HttpFetch = (input: RequestInfo | URL, init?: RequestInit) => Promis
 export interface JellyfinUser {
   id: string
   name: string
+  /** profile image on the public Jellyfin host; empty when the user has none */
+  avatarUrl: string
 }
 
 interface JellyfinUserDto {
   Id?: string
   Name?: string
+  PrimaryImageTag?: string
 }
 
 const AUTH_HEADER =
@@ -24,9 +27,15 @@ const AUTH_HEADER =
 /** how long a resolved session-token → user mapping is trusted before re-asking Jellyfin */
 const USER_CACHE_MS = 60_000
 
-function toUser(dto: JellyfinUserDto | undefined): JellyfinUser | null {
+function toUser(dto: JellyfinUserDto | undefined, publicUrl: string): JellyfinUser | null {
   if (!dto?.Id || !dto.Name) return null
-  return { id: dto.Id, name: dto.Name }
+  let avatarUrl = ''
+  if (dto.PrimaryImageTag && publicUrl) {
+    const url = endpoint(publicUrl, `/Users/${encodeURIComponent(dto.Id)}/Images/Primary`)
+    url.searchParams.set('tag', dto.PrimaryImageTag)
+    avatarUrl = url.toString()
+  }
+  return { id: dto.Id, name: dto.Name, avatarUrl }
 }
 
 interface JellyfinItem {
@@ -87,7 +96,7 @@ export class JellyfinClient {
       throw new Error(`jellyfin: /Users/AuthenticateByName returned ${response.status}: ${body}`)
     }
     const payload = await response.json() as { AccessToken?: string; User?: JellyfinUserDto }
-    const user = toUser(payload.User)
+    const user = toUser(payload.User, this.#config.publicUrl)
     if (!payload.AccessToken || user === null) {
       throw new Error('jellyfin: auth response is missing the access token or user')
     }
@@ -107,7 +116,7 @@ export class JellyfinClient {
       this.#userCache.delete(token)
       return null
     }
-    const user = toUser(await response.json() as JellyfinUserDto)
+    const user = toUser(await response.json() as JellyfinUserDto, this.#config.publicUrl)
     if (user === null) return null
     this.#userCache.set(token, { user, expires: Date.now() + USER_CACHE_MS })
     return user

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ApiError, login } from '../lib/api'
-  import { DEFAULT_BRANDING, DEFAULT_ICON_URL } from '../lib/branding'
+  import { DEFAULT_BRANDING, TICKET_NOTCHES, TICKET_OUTLINE } from '../lib/branding'
   import { t } from '../lib/i18n.svelte.ts'
   import type { MeDto } from '../../../shared/api.ts'
 
@@ -35,7 +35,12 @@
 
 <div class="gate">
   <form class="card" onsubmit={submit}>
-    <img class="tile" src={DEFAULT_ICON_URL} alt="" aria-hidden="true" />
+    <span class="tile" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <path d={TICKET_OUTLINE} />
+        <path d={TICKET_NOTCHES} />
+      </svg>
+    </span>
     <h1>{DEFAULT_BRANDING.name}</h1>
     <p class="hint">{t('signInHint')}</p>
     <input
@@ -83,8 +88,20 @@
     width: 52px;
     height: 52px;
     margin: 0 auto;
-    display: block;
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
     border-radius: 13px;
+  }
+
+  .tile svg {
+    width: 30px;
+    height: 30px;
+    fill: none;
+    stroke: var(--accent-strong);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   h1 {

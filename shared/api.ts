@@ -58,4 +58,6 @@ export interface MeDto {
   name: string
   /** per-user credential for /calendar.ics?token=… — empty when auth is disabled */
   feedToken: string
+  /** Jellyfin profile image; empty when the user has none or auth is disabled */
+  avatarUrl: string
 }
