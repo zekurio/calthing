@@ -8,7 +8,8 @@ devenv.local.nix
 # Deno-managed dependencies (regenerate with `deno install`) and frontend output
 node_modules/
 vendor/
-frontend/dist/*
+frontend/dist/
+frontend/.vite/
 
 # local config & secrets
 config.yaml
