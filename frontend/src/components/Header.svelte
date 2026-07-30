@@ -1,7 +1,7 @@
 <script lang="ts">
   import { addDays, addMonths, monthLabel, startOfWeek, weekLabel } from '../lib/dates'
   import type { BrandingDto, InstanceStatusDto, MeDto } from '../../../shared/api.ts'
-  import { TICKET_NOTCHES, TICKET_OUTLINE } from '../lib/branding'
+  import { DEFAULT_ICON_URL } from '../lib/branding'
   import { i18n, setLocale, t } from '../lib/i18n.svelte.ts'
   import { setTheme, theme } from '../lib/theme.svelte.ts'
 
@@ -35,7 +35,7 @@
 
   let copied = $state(false)
   let settingsOpen = $state(false)
-  let brandIconFailed = $state(false)
+  let customBrandIconFailed = $state(false)
   let avatarFailed = $state(false)
   const radarrInstances = $derived(instances.filter((instance) => instance.type === 'radarr'))
   const sonarrInstances = $derived(instances.filter((instance) => instance.type === 'sonarr'))
@@ -72,14 +72,11 @@
 <header>
   <div class="brand">
     <span class="tile" aria-hidden="true">
-      {#if branding.iconUrl && !brandIconFailed}
-        <img src={branding.iconUrl} alt="" onerror={() => (brandIconFailed = true)} />
-      {:else}
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d={TICKET_OUTLINE} />
-          <path d={TICKET_NOTCHES} />
-        </svg>
-      {/if}
+      <img
+        src={branding.iconUrl && !customBrandIconFailed ? branding.iconUrl : DEFAULT_ICON_URL}
+        alt=""
+        onerror={() => (customBrandIconFailed = true)}
+      />
     </span>
     <h1 class="brand-name">{branding.name}</h1>
   </div>
@@ -240,16 +237,6 @@
     background: var(--topbar-tile);
     border-radius: 8px;
     overflow: hidden;
-  }
-
-  .tile svg {
-    width: 18px;
-    height: 18px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
   }
 
   .tile img {
