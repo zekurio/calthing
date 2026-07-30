@@ -126,6 +126,7 @@ stdenvNoCC.mkDerivation {
   meta = {
     description = "Merged Radarr/Sonarr calendar feed with a web UI";
     homepage = "https://github.com/zekurio/calthing";
+    license = lib.licenses.mit;
     mainProgram = "calthing";
   };
 }

@@ -1,34 +1,59 @@
 # calthing
 
 One calendar for your whole \*arr stack. calthing queries the calendar APIs of any number of Radarr
-and Sonarr instances and serves:
+and Sonarr instances and serves them as a single merged iCal feed (`/calendar.ics`) plus a web
+calendar with month, week, and agenda views, posters, episode numbers, release-type badges, and
+downloaded status.
 
-- **`/calendar.ics`** — a single merged iCal feed you can subscribe to from Google Calendar, Apple
-  Calendar, or anything else that speaks iCal.
-- **A web calendar** — a month grid and agenda view with posters, episode numbers, release-type
-  badges (cinema / digital / physical), and downloaded status, served by the same process.
+Episodes are timed events at their air time (shifted by `availability_delay`); movie releases are
+all-day events, one per release date. Event UIDs are stable, so subscribed calendars update in place
+instead of duplicating on refresh. One instance being down never kills the feed: its error is
+reported per instance while the rest keep serving.
 
-The backend runs on Deno with Elysia. The Svelte frontend uses Eden Treaty for end-to-end typed API
-calls and TanStack Svelte Query for cancellation, caching, and request-state management.
+Optionally, Jellyfin can gate access and deep-link available episodes to their Jellyfin item.
 
-Episodes appear as timed events at their air time; movie releases appear as all-day events, one per
-release date. Event UIDs are stable, so subscribed calendars update in place instead of duplicating
-on refresh.
+### Deployment
 
-## Running
+The NixOS module is the preferred deployment path. Add calthing to your flake inputs:
 
-```sh
-calthing -config config.yaml
+```nix
+inputs.calthing.url = "github:zekurio/calthing";
 ```
 
-For a local source run, build the frontend first and start Deno:
+Then import and configure the module:
+
+```nix
+{
+  imports = [ inputs.calthing.nixosModules.default ];
+
+  services.calthing = {
+    enable = true;
+    environmentFile = "/run/secrets/calthing.env"; # RADARR_API_KEY=..., CALTHING_FEED_SECRET=...
+    settings = {
+      listen = ":8080";
+      instances = [
+        {
+          name = "movies";
+          type = "radarr";
+          url = "http://127.0.0.1:7878";
+          api_key = "\${RADARR_API_KEY}";
+        }
+      ];
+    };
+  };
+}
+```
+
+`settings` is serialized to YAML and passed as `-config`; the service runs hardened under
+`DynamicUser`. You can also build and run it directly with `nix build` and
+`nix run . -- -config config.yaml`, or from source with Deno 2:
 
 ```sh
 deno task frontend:build
 deno task start -config config.yaml
 ```
 
-## Configuration
+### Configuration
 
 Copy [`config.example.yaml`](config.example.yaml) and adjust:
 
@@ -46,7 +71,7 @@ calendar:
   feed_secret: ${CALTHING_FEED_SECRET} # signs per-user feed tokens; required with Jellyfin login
 
 instances:
-  - name: movies # unique, stable — part of event UIDs
+  - name: movies # unique and stable — part of event UIDs
     type: radarr
     url: http://127.0.0.1:7878
     api_key: ${RADARR_API_KEY}
@@ -55,141 +80,82 @@ instances:
     type: sonarr
     url: http://127.0.0.1:8989
     api_key: ${SONARR_API_KEY}
-```
 
-The web calendar branding and optional Jellyfin linking are configured separately:
-
-```yaml
-branding:
+branding: # shown above the web calendar
   name: Our Jellyfin
   icon_url: https://example.com/mark.svg # optional; built-in ticket icon otherwise
   page_title: 'Our Jellyfin · What is on'
   description: 'The shared movie and TV schedule.'
 
-jellyfin:
-  url: http://127.0.0.1:8096 # private API address
-  public_url: https://jellyfin.example.com # links shown to visitors
+jellyfin: # optional; `url` enables login, `public_url` + `api_key` enable event links
+  url: http://127.0.0.1:8096
+  public_url: https://jellyfin.example.com
   api_key: ${JELLYFIN_API_KEY}
 ```
 
-When configured, calthing matches Sonarr episodes to Jellyfin by TVDB episode ID. Available episodes
-get a direct Jellyfin link in their event details. The API key and private URL stay on the server
-and are never returned to the browser. `url` enables login; `public_url` and `api_key` additionally
-enable linking.
-
 `${VAR}` references are expanded from the environment at startup and fail loudly when unset — pair
-them with a systemd `EnvironmentFile` for secrets. `CALTHING_LISTEN` and `CALTHING_CONFIG` override
-their config counterparts. `CALTHING_STATIC_DIR` can override the frontend asset directory; packaged
-installations set it automatically.
+them with a systemd `EnvironmentFile` for secrets. `CALTHING_CONFIG` and `CALTHING_LISTEN` override
+their config counterparts; `CALTHING_STATIC_DIR` overrides the frontend asset directory (packaged
+installs set it automatically).
 
-## Auth model
+Renaming an instance changes its event UIDs, which re-creates those events in subscribed calendars.
 
-Setting `jellyfin.url` turns on Jellyfin-backed auth. `calendar.feed_secret` must also be set to a
-long random string (for example, `nix shell nixpkgs#openssl --command openssl rand -hex 32`) so
-calthing can issue personal calendar feed URLs:
+### Auth
 
-- **Web UI** — visitors sign in with their Jellyfin username and password
-  (`/Users/AuthenticateByName`). The Jellyfin access token is stored in an HttpOnly session cookie
-  and re-validated against Jellyfin (with a short cache), so revoking the session in Jellyfin also
-  signs the visitor out here. `/api/events` requires a session.
+Setting `jellyfin.url` turns on Jellyfin-backed auth, which also requires `calendar.feed_secret` — a
+long random string, e.g. `nix shell nixpkgs#openssl --command openssl rand -hex 32`.
+
+- **Web UI** — visitors sign in with their Jellyfin username and password. The access token is kept
+  in an HttpOnly session cookie and re-validated against Jellyfin, so revoking the session there
+  signs the visitor out here.
 - **Calendar feed** — calendar clients cannot log in, so each user gets a personal
-  `/calendar.ics?token=…` URL (shown behind the copy-link button). The token is
-  `<userId>.<HMAC-SHA256(secret, userId)>`: it grants access to the feed only, never to Jellyfin.
-  Rotating `calendar.feed_secret` invalidates every feed URL at once.
+  `/calendar.ics?token=…` URL (behind the copy-link button). The token is
+  `<userId>.<HMAC-SHA256(secret, userId)>` and grants access to the feed only. Rotating
+  `calendar.feed_secret` invalidates every feed URL at once.
 
 Without `jellyfin.url`, the calendar and feed are public — put them behind your reverse proxy's auth
-if they should not be reachable. Renaming an instance changes its event UIDs, which re-creates those
-events in subscribed calendars; treat instance names as stable.
+if they should not be reachable.
 
-## Endpoints
+| Route               | Description                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `GET /calendar.ics` | Merged iCal feed; optional `?start=YYYY-MM-DD&end=YYYY-MM-DD`, `?token=` with auth |
+| `GET /api/events`   | JSON events, branding, and per-instance status; same `start`/`end` parameters      |
+| `POST /api/auth`    | Jellyfin login; sets the session cookie                                            |
+| `GET /api/me`       | Current session and personal feed token                                            |
+| `POST /api/logout`  | Ends the session                                                                   |
+| `GET /api/health`   | Liveness probe                                                                     |
+| `GET /`             | Web calendar                                                                       |
 
-| Route               | Description                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `GET /calendar.ics` | Merged iCal feed. Optional `?start=YYYY-MM-DD&end=YYYY-MM-DD`; requires the per-user `?token=` when auth is enabled |
-| `GET /api/events`   | JSON events and per-instance status, with the same `start`/`end` parameters                                         |
-| `POST /api/auth`    | Jellyfin login; sets the session cookie                                                                             |
-| `GET /api/me`       | Current session and personal feed token                                                                             |
-| `POST /api/logout`  | Ends the session                                                                                                    |
-| `GET /api/health`   | Liveness probe                                                                                                      |
-| `GET /`             | Web calendar                                                                                                        |
+### Development
 
-One instance being down never kills the feed: its error is reported in `/api/events` and shown in
-the UI while the remaining instances serve.
-
-## Nix
-
-Build and run directly:
+With [devenv](https://devenv.sh) and direnv (provides Deno):
 
 ```sh
-nix build
-nix run . -- -config config.yaml
+direnv allow
+devenv up          # Deno API on :8080, Vite on :5173 proxying /api and /calendar.ics
 ```
 
-The package builds the Vite frontend separately, installs the Deno source and locked dependencies
-into the Nix store, and exposes the same `calthing -config ...` executable contract.
-
-NixOS module:
-
-```nix
-{
-  inputs.calthing.url = "github:zekurio/calthing";
-
-  # in a nixosConfiguration:
-  imports = [ inputs.calthing.nixosModules.default ];
-
-  services.calthing = {
-    enable = true;
-    environmentFile = "/run/secrets/calthing.env"; # RADARR_API_KEY=...
-    settings = {
-      listen = ":8080";
-      instances = [
-        {
-          name = "movies";
-          type = "radarr";
-          url = "http://127.0.0.1:7878";
-          api_key = "\${RADARR_API_KEY}";
-        }
-      ];
-    };
-  };
-}
-```
-
-### Updating dependencies
-
-Dependencies are pinned by `deno.json` and `deno.lock`; the lockfile is the single source of truth.
-The local `vendor/` (jsr modules, via `"vendor": true`) and `node_modules/` (npm packages)
-directories are generated artifacts — `deno install` recreates both from the lockfile, and neither
-is checked in. After changing dependency versions (`deno outdated --update` or editing `deno.json`),
-run `deno install` and commit the updated `deno.json` and `deno.lock`.
-
-Nix resolves the lockfile in a fixed-output derivation that emits both directories, with
-target-specific hashes in `denoDepsHashes` in [`nix/package.nix`](nix/package.nix). After a
-dependency change, regenerate all four hashes from any machine with
-[`nix/update-deps-hashes.sh`](nix/update-deps-hashes.sh) (it replays the derivation's
-`deno install --os/--arch` cross-install for every target and hashes the result), then paste its
-output into `denoDepsHashes` and confirm with `nix build`.
-
-## Development
-
-The repository ships a [devenv](https://devenv.sh) and direnv setup. After `direnv allow`:
+Without Nix, install Deno 2 and run `deno task dev`. Other tasks:
 
 ```sh
-devenv up                         # Deno API :8080 and Vite :5173
-deno task test                    # backend tests
-deno task check                   # backend and frontend checks
-deno task frontend:build          # production frontend
-nix build                         # reproducible Deno-only package
+deno task test              # backend tests
+deno task check             # deno check + svelte-check
+deno task frontend:build    # production frontend bundle
+nix build                   # reproducible package build
 ```
 
-The Vite development server proxies `/api` and `/calendar.ics` to the Deno backend.
-`src/http/app.ts` is the Elysia API contract imported type-only by the Eden client; `shared/api.ts`
-contains browser-safe DTOs. TanStack Query keys event requests by date window and passes its
-`AbortSignal` through Eden.
+Run `deno fmt`, `deno lint`, `deno task check`, and `deno task test` before opening a pull request.
+[AGENTS.md](AGENTS.md) covers branch, commit, and code conventions.
 
-The iCalendar serializer is covered by the byte-for-byte golden fixture at
-`tests/fixtures/expected.ics`. Change that fixture only for intentional rendering changes, then run:
+Dependencies are pinned by `deno.json` and `deno.lock`; `vendor/` (jsr) and `node_modules/` (npm)
+are regenerated by `deno install` and not checked in. After a dependency change, run `deno install`,
+commit both files, regenerate the per-target hashes in `nix/package.nix` with
+[`nix/update-deps-hashes.sh`](nix/update-deps-hashes.sh), and confirm with `nix build`.
 
-```sh
-deno test --allow-read tests/ical.test.ts
-```
+### Contributing
+
+Found a bug or have an idea? [Open an issue](https://github.com/zekurio/calthing/issues/new).
+
+### License
+
+[MIT](LICENSE)
