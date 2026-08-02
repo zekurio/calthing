@@ -7,7 +7,11 @@ export interface JellyfinConfig {
 }
 
 export type HttpFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-export type DeviceId = () => string
+export type DeviceId = (
+  scope: string,
+  username: string,
+  browserDeviceId: string,
+) => string | Promise<string>
 
 export interface JellyfinUser {
   id: string
@@ -59,6 +63,16 @@ function toUser(dto: JellyfinUserDto | undefined, publicUrl: string): JellyfinUs
     avatarUrl = url.toString()
   }
   return { id: dto.Id, name: dto.Name, avatarUrl }
+}
+
+async function defaultDeviceId(
+  scope: string,
+  username: string,
+  browserDeviceId: string,
+): Promise<string> {
+  const input = new TextEncoder().encode(`${scope}\0${username}\0${browserDeviceId}`)
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', input))
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function clientAuthorization(deviceId: string): string {
@@ -119,7 +133,7 @@ export class JellyfinClient {
   constructor(
     config: JellyfinConfig,
     fetchFn: HttpFetch = fetch,
-    deviceId: DeviceId = () => crypto.randomUUID(),
+    deviceId: DeviceId = defaultDeviceId,
     timeoutMs = DEFAULT_TIMEOUT_MS,
   ) {
     this.#config = config
@@ -129,17 +143,22 @@ export class JellyfinClient {
   }
 
   /** Logs in via /Users/AuthenticateByName. Returns null on wrong credentials. */
-  authenticate(
+  async authenticate(
     username: string,
     password: string,
+    browserDeviceId: string,
   ): Promise<{ token: string; user: JellyfinUser } | null> {
     const context = '/Users/AuthenticateByName'
-    return this.#request(context, endpoint(this.#config.url, context), {
+    const deviceId = await this.#deviceId(this.#config.url, username, browserDeviceId)
+    if (!/^[A-Za-z0-9._:-]{16,128}$/.test(deviceId)) {
+      throw new Error('jellyfin: generated device id is invalid')
+    }
+    return await this.#request(context, endpoint(this.#config.url, context), {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: clientAuthorization(this.#deviceId()),
+        Authorization: clientAuthorization(deviceId),
       },
       body: JSON.stringify({ Username: username, Pw: password }),
     }, async (response) => {
@@ -212,6 +231,7 @@ export class JellyfinClient {
 
     const wanted = new Set(providerKeys)
     const byProvider = new Map<string, JellyfinItem>()
+    const deadline = performance.now() + this.#timeoutMs
     const pageSize = 1000
     let startIndex = 0
     while (byProvider.size < wanted.size) {
@@ -223,6 +243,10 @@ export class JellyfinClient {
       url.searchParams.set('StartIndex', String(startIndex))
       url.searchParams.set('Limit', String(pageSize))
 
+      const remainingMs = deadline - performance.now()
+      if (remainingMs <= 0) {
+        throw new Error(`jellyfin: ${context} timed out after ${this.#timeoutMs}ms`)
+      }
       const payload = await this.#request(context, url, {
         headers: {
           Accept: 'application/json',
@@ -235,7 +259,7 @@ export class JellyfinClient {
           throw new Error('jellyfin: /Items response has invalid items')
         }
         return decoded
-      })
+      }, remainingMs)
 
       const items = payload.Items ?? []
       for (const item of items) {
@@ -246,7 +270,10 @@ export class JellyfinClient {
         }
       }
       startIndex += items.length
-      if (items.length === 0 || startIndex >= (payload.TotalRecordCount ?? startIndex)) break
+      if (
+        items.length === 0 || items.length < pageSize ||
+        (payload.TotalRecordCount !== undefined && startIndex >= payload.TotalRecordCount)
+      ) break
     }
     for (const event of events) {
       const item = byProvider.get(providerKey(event))
@@ -267,14 +294,15 @@ export class JellyfinClient {
     input: URL,
     init: RequestInit,
     consume: (response: Response) => Promise<T>,
+    timeoutMs = this.#timeoutMs,
   ): Promise<T> {
     const controller = new AbortController()
     let timeoutId: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
         controller.abort()
-        reject(new Error(`jellyfin: ${context} timed out after ${this.#timeoutMs}ms`))
-      }, this.#timeoutMs)
+        reject(new Error(`jellyfin: ${context} timed out after ${Math.ceil(timeoutMs)}ms`))
+      }, timeoutMs)
     })
     const request = (async () => {
       let response: Response

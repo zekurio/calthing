@@ -7,11 +7,13 @@
 
   let {
     viewDate,
+    today,
     events,
     onselect,
     instanceColors,
   }: {
     viewDate: Date
+    today: Date
     events: EventDto[]
     onselect: (e: EventDto) => void
     instanceColors: Record<string, string>
@@ -23,8 +25,6 @@
   })
   const byDay = $derived(groupEventsByDay(events))
   const labels = $derived(weekdayLabels())
-
-  const today = new Date()
 </script>
 
 <div class="week" role="grid" aria-label={t('viewWeek')}>

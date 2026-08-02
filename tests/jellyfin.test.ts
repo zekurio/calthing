@@ -62,6 +62,28 @@ Deno.test('Jellyfin matches TVDB episode IDs using standard API-key authorizatio
   assertStringIncludes(requested?.toString() ?? '', 'jellyfin.internal')
 })
 
+Deno.test('Jellyfin continues full pages when item counts are omitted', async () => {
+  const starts: string[] = []
+  const client = new JellyfinClient(config, (input) => {
+    const url = new URL(input.toString())
+    starts.push(url.searchParams.get('StartIndex') ?? '')
+    if (starts.length === 1) {
+      return Promise.resolve(Response.json({
+        Items: Array.from({ length: 1000 }, (_, index) => ({ Id: `other-${index}` })),
+      }))
+    }
+    return Promise.resolve(Response.json({
+      Items: [{ Id: 'wanted', ProviderIds: { Tvdb: '123' } }],
+    }))
+  })
+  const events = [episode('123')]
+
+  await client.addLinks(events)
+
+  assertEquals(starts, ['0', '1000'])
+  assertEquals(events[0]?.jellyfinUrl, 'https://watch.example/jellyfin/web/#/details?id=wanted')
+})
+
 Deno.test('Jellyfin errors include bounded upstream context', async () => {
   const marker = 'must-not-leak'
   const client = new JellyfinClient(
@@ -75,10 +97,9 @@ Deno.test('Jellyfin errors include bounded upstream context', async () => {
   assertEquals(error.message.length <= 550, true)
 })
 
-Deno.test('Jellyfin login uses a unique device ID and validates every request', async () => {
+Deno.test('Jellyfin login keeps browser device IDs stable and validates every request', async () => {
   const requests: Array<{ url: URL; authorization: string }> = []
-  const deviceIds = ['login-device-one', 'login-device-two']
-  let nextDeviceId = 0
+  const deviceInputs: Array<[string, string, string]> = []
   const client = new JellyfinClient(config, (input, init) => {
     const url = new URL(input.toString())
     const authorization = new Headers(init?.headers).get('Authorization') ?? ''
@@ -104,31 +125,44 @@ Deno.test('Jellyfin login uses a unique device ID and validates every request', 
       return Promise.resolve(new Response(null, { status: 204 }))
     }
     return Promise.resolve(new Response('unexpected', { status: 500 }))
-  }, () => deviceIds[nextDeviceId++] ?? 'unexpected-device')
+  }, (scope, username, browserDeviceId) => {
+    deviceInputs.push([scope, username, browserDeviceId])
+    return `${browserDeviceId}-${username}`
+  })
 
   const avatarUrl = 'https://watch.example/jellyfin/Users/user-1/Images/Primary?tag=tag123'
-  assertEquals(await client.authenticate('alice', 'wrong'), null)
-  const session = await client.authenticate('alice', 'right')
+  assertEquals(await client.authenticate('alice', 'wrong', 'browser-one'), null)
+  const session = await client.authenticate('alice', 'right', 'browser-one')
   assertEquals(session, { token: 'jf-token', user: { id: 'user-1', name: 'alice', avatarUrl } })
   assertEquals(
     requests[0]?.authorization,
-    'MediaBrowser Client="calthing", Device="calthing", DeviceId="login-device-one", Version="1.0"',
+    'MediaBrowser Client="calthing", Device="calthing", DeviceId="browser-one-alice", Version="1.0"',
   )
   assertEquals(
     requests[1]?.authorization,
-    'MediaBrowser Client="calthing", Device="calthing", DeviceId="login-device-two", Version="1.0"',
+    'MediaBrowser Client="calthing", Device="calthing", DeviceId="browser-one-alice", Version="1.0"',
   )
+  await client.authenticate('alice', 'right', 'browser-two')
+  assertEquals(
+    requests[2]?.authorization,
+    'MediaBrowser Client="calthing", Device="calthing", DeviceId="browser-two-alice", Version="1.0"',
+  )
+  assertEquals(deviceInputs, [
+    ['http://jellyfin.internal:8096/base', 'alice', 'browser-one'],
+    ['http://jellyfin.internal:8096/base', 'alice', 'browser-one'],
+    ['http://jellyfin.internal:8096/base', 'alice', 'browser-two'],
+  ])
 
   assertEquals(await client.user('jf-token'), { id: 'user-1', name: 'alice', avatarUrl })
   assertEquals(await client.user('jf-token'), { id: 'user-1', name: 'alice', avatarUrl })
-  assertEquals(requests[2]?.url.pathname, '/base/Users/Me')
   assertEquals(requests[3]?.url.pathname, '/base/Users/Me')
-  assertEquals(requests[2]?.authorization, 'MediaBrowser Token="jf-token"')
+  assertEquals(requests[4]?.url.pathname, '/base/Users/Me')
   assertEquals(requests[3]?.authorization, 'MediaBrowser Token="jf-token"')
+  assertEquals(requests[4]?.authorization, 'MediaBrowser Token="jf-token"')
 
   await client.logout('jf-token')
-  assertEquals(requests[4]?.url.pathname, '/base/Sessions/Logout')
-  assertEquals(requests[4]?.authorization, 'MediaBrowser Token="jf-token"')
+  assertEquals(requests[5]?.url.pathname, '/base/Sessions/Logout')
+  assertEquals(requests[5]?.authorization, 'MediaBrowser Token="jf-token"')
 })
 
 Deno.test('Jellyfin distinguishes rejected tokens from validation outages', async () => {

@@ -26,6 +26,8 @@ const config: Config = {
   }],
 }
 
+const browserDeviceId = '00000000-0000-4000-8000-000000000001'
+
 const event: CalendarEvent = {
   uid: 'sonarr-tv-1@calthing',
   instance: 'tv',
@@ -169,6 +171,7 @@ Deno.test('date windows reject malformed, impossible, and non-increasing dates',
       ['/api/events?start=2026-02-29', 'invalid start "2026-02-29", want YYYY-MM-DD\n'],
       ['/api/events?end=2026-13-01', 'invalid end "2026-13-01", want YYYY-MM-DD\n'],
       ['/api/events?start=2026-08-01&end=2026-08-01', 'end must be after start\n'],
+      ['/api/events?start=2025-01-01&end=2027-01-01', 'date window must not exceed 370 days\n'],
       ['/api/events?start=2026-08-02&end=2026-08-01', 'end must be after start\n'],
     ] as const
   ) {
@@ -240,7 +243,11 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
   const wrong = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: 'alice', password: 'wrong' }),
+    body: JSON.stringify({
+      username: 'alice',
+      password: 'wrong',
+      deviceId: browserDeviceId,
+    }),
   })
   assertEquals(wrong.status, 401)
   assertEquals(await wrong.text(), 'unauthorized\n')
@@ -248,7 +255,11 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
   const login = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: 'alice', password: 'right' }),
+    body: JSON.stringify({
+      username: 'alice',
+      password: 'right',
+      deviceId: browserDeviceId,
+    }),
   })
   assertEquals(login.status, 200)
   const cookie = login.headers.get('set-cookie') ?? ''
@@ -315,7 +326,11 @@ Deno.test('auth disabled keeps the API and feed public and /api/me anonymous', a
   const login = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: 'alice', password: 'right' }),
+    body: JSON.stringify({
+      username: 'alice',
+      password: 'right',
+      deviceId: browserDeviceId,
+    }),
   })
   assertEquals(login.status, 404)
 })
@@ -343,7 +358,11 @@ Deno.test('Jellyfin outages return 502 for login but 503 for session validation'
   const login = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: 'alice', password: 'right' }),
+    body: JSON.stringify({
+      username: 'alice',
+      password: 'right',
+      deviceId: browserDeviceId,
+    }),
   })
   assertEquals(login.status, 502)
   assertEquals(await login.text(), 'jellyfin unreachable\n')
@@ -397,12 +416,16 @@ Deno.test('logout clears the cookie without waiting for upstream revocation', as
     }),
   ])
   clearTimeout(timeoutId)
-  releaseLogout?.()
 
   assertEquals(logoutStarted, true)
   assert(outcome instanceof Response)
   assertEquals(outcome.status, 200)
   assertStringIncludes(outcome.headers.get('set-cookie') ?? '', 'Max-Age=0')
+  const replay = await request(app, '/api/events', {
+    headers: { cookie: 'calthing_session=jf-token' },
+  })
+  assertEquals(replay.status, 401, 'a logged-out token is rejected before upstream revocation')
+  releaseLogout?.()
 })
 
 Deno.test('health is static and does not fetch upstream instances', async () => {
@@ -456,6 +479,11 @@ Deno.test('static handler serves files, falls back only for SPA paths, and rejec
   assertEquals(missingAsset.status, 404)
   assertEquals(await missingAsset.text(), 'Not Found\n')
 
+  const unknownApi = await request(app, '/api/typo')
+  assertEquals(unknownApi.status, 404)
+  assertEquals(await unknownApi.text(), 'Not Found\n')
+  assertEquals(unknownApi.headers.get('content-type'), 'text/plain; charset=utf-8')
+
   const head = await request(app, '/vite.config.ts', { method: 'HEAD' })
   assertEquals(head.status, 200)
   assertEquals(await head.text(), '')
@@ -472,6 +500,7 @@ Deno.test('static handler gives hashed assets immutable cache headers and contai
     ['/srv/index.html', encoder.encode('<!doctype html>')],
     ['/srv/icon.svg', encoder.encode('<svg/>')],
     ['/srv/assets/index-AbCd1234.css', encoder.encode('body { color: black }')],
+    ['/srv/assets/custom.css', encoder.encode('body { color: red }')],
   ])
   const handler = createStaticHandler('/srv', {
     realPath(path) {
@@ -502,7 +531,10 @@ Deno.test('static handler gives hashed assets immutable cache headers and contai
 
   const head = await get('/assets/index-AbCd1234.css', 'HEAD')
   assertEquals(head.headers.get('content-length'), null)
-  assertEquals(await head.text(), '')
+  assertEquals(await head.text(), 'body { color: black }')
+
+  const unhashedAsset = await get('/assets/custom.css')
+  assertEquals(unhashedAsset.headers.get('cache-control'), 'no-cache')
 
   const icon = await get('/icon.svg')
   assertEquals(icon.headers.get('cache-control'), 'no-cache')

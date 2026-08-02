@@ -29,7 +29,7 @@
   } = $props()
 
   let settingsOpen = $state(false)
-  let avatarFailed = $state(false)
+  let failedAvatarUrl = $state('')
   let menuElement = $state<HTMLDetailsElement>()
 
   const languageOptions = [
@@ -57,8 +57,13 @@
 
 <details class="user-menu" bind:this={menuElement} bind:open={settingsOpen}>
   <summary class="avatar-btn" aria-label={t('menu')} title={t('menu')}>
-    {#if me?.avatarUrl && !avatarFailed}
-      <img class="avatar-img" src={me.avatarUrl} alt="" onerror={() => (avatarFailed = true)} />
+    {#if me?.avatarUrl && failedAvatarUrl !== me.avatarUrl}
+      <img
+        class="avatar-img"
+        src={me.avatarUrl}
+        alt=""
+        onerror={() => (failedAvatarUrl = me?.avatarUrl ?? '')}
+      />
     {:else}
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M18 20a6 6 0 0 0-12 0" />

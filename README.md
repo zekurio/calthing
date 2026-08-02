@@ -14,7 +14,9 @@ Optionally, Jellyfin can gate access and deep-link available episodes to their J
 
 ### Deployment
 
-The NixOS module is the preferred deployment path. Add calthing to your flake inputs:
+The NixOS module is the preferred deployment path. calthing's listener serves HTTP; keep it on a
+private interface and put an HTTPS reverse proxy in front when Jellyfin auth is enabled (the session
+cookie is intentionally `Secure`). Add calthing to your flake inputs:
 
 ```nix
 inputs.calthing.url = "github:zekurio/calthing";
@@ -64,7 +66,7 @@ cache:
   ttl: 10m # reuse upstream responses this long
 
 calendar:
-  past_days: 30 # default window: today-30d .. today+90d
+  past_days: 30 # default window: today-30d .. today+90d (370 days maximum)
   future_days: 90
   availability_delay: 1h # show episodes after download/transcode time
   name: 'Media Calendar' # calendar name shown by clients
@@ -106,8 +108,9 @@ Setting `jellyfin.url` turns on Jellyfin-backed auth, which also requires `calen
 long random string, e.g. `nix shell nixpkgs#openssl --command openssl rand -hex 32`.
 
 - **Web UI** — visitors sign in with their Jellyfin username and password. The access token is kept
-  in an HttpOnly session cookie and re-validated against Jellyfin, so revoking the session there
-  signs the visitor out here.
+  in an HttpOnly, Secure session cookie and re-validated against Jellyfin, so revoking the session
+  there signs the visitor out here. Authenticated deployments must be exposed to browsers over HTTPS
+  (normally by terminating TLS at a reverse proxy in front of calthing's HTTP listener).
 - **Calendar feed** — calendar clients cannot log in, so each user gets a personal
   `/calendar.ics?token=…` URL (behind the copy-link button). The token is
   `<userId>.<HMAC-SHA256(secret, userId)>` and grants access to the feed only. Rotating

@@ -39,7 +39,9 @@
           class="row"
           aria-label={eventAriaLabel(
             e,
-            e.kind === 'episode' ? sxxeyy(e.season, e.episode) : kindLabel(e.kind),
+            e.kind === 'episode'
+              ? `${sxxeyy(e.season, e.episode)}${e.subtitle ? ` · ${e.subtitle}` : ''}`
+              : kindLabel(e.kind),
             e.downloaded ? t('available') : t('pending'),
             e.kind === 'episode' ? formatTime(e.start) : undefined,
           )}

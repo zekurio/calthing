@@ -1,7 +1,7 @@
 <script lang="ts">
   import { addDays, addMonths, monthLabel, startOfWeek, weekLabel } from '../../lib/dates.ts'
   import { t } from '../../lib/i18n.svelte.ts'
-  import type { View } from './types.ts'
+  import type { View } from '../../lib/view.ts'
 
   let {
     view,

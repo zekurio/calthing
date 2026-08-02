@@ -5,10 +5,10 @@
   makeWrapper,
   version ? "0.1.0",
   denoDepsHashes ? {
-    aarch64-darwin = "sha256-IuonLz8Yi+wpZKt2vBjYpD8VkI/IXRVFSACol20NVgQ=";
-    x86_64-darwin = "sha256-hrrnX4etdrxKz0+ZRDsVRHCTNoRNWbI7Qj3I/z3BlX0=";
-    aarch64-linux = "sha256-LmdMHirDqJvVjvxclMN/iO04ijbtdl5d383TRkz1PZI=";
-    x86_64-linux = "sha256-fPGVJcn7gpmgefJL9dq6cxiqc0Iiix+0dKTAr51p1hk=";
+    aarch64-darwin = "sha256-1Yrh+L59XYydWULNk5vMHCRQYKq4DrrWAnBMwJijNoI=";
+    x86_64-darwin = "sha256-+SVdaT3fKMcOmDqlWFSklnoBM7ImeYL7GbU3ytKFm1c=";
+    aarch64-linux = "sha256-gkj7tD4uIZBJoINrG5kmDZyLm1UOI3w9qiUG3vmRt6k=";
+    x86_64-linux = "sha256-h4NzESx2Xn2mKmcSqqPvJuW0MFGiHWVGHUp1dywsjMQ=";
   },
 }:
 

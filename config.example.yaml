@@ -10,6 +10,7 @@ cache:
 
 calendar:
   # Default window for /calendar.ics and /api/events: today-past_days .. today+future_days.
+  # Their sum and explicit API windows may not exceed 370 days.
   past_days: 30
   future_days: 90
   # Added to episode air times to account for download and transcode time.

@@ -1,3 +1,5 @@
+export const MAX_CALENDAR_WINDOW_DAYS = 370
+
 export type Source = 'radarr' | 'sonarr'
 
 export type Kind =

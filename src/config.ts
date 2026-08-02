@@ -1,5 +1,5 @@
 import { parse as parseYaml } from '@std/yaml'
-import type { Source } from '../shared/api.ts'
+import { MAX_CALENDAR_WINDOW_DAYS, type Source } from '../shared/api.ts'
 
 export type Env = Record<string, string | undefined>
 
@@ -165,6 +165,11 @@ function validate(config: Config): void {
   }
   if (config.calendar.pastDays < 0 || config.calendar.futureDays < 0) {
     throw new Error('config: calendar.past_days and future_days must be >= 0')
+  }
+  if (config.calendar.pastDays + config.calendar.futureDays > MAX_CALENDAR_WINDOW_DAYS) {
+    throw new Error(
+      `config: calendar default window must not exceed ${MAX_CALENDAR_WINDOW_DAYS} days`,
+    )
   }
   if (config.calendar.availabilityDelayMs < 0) {
     throw new Error('config: calendar.availability_delay must be >= 0')

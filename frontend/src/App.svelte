@@ -15,65 +15,90 @@
   import { applyBrandingMetadata, DEFAULT_BRANDING } from './lib/branding'
   import { buildInstanceColors } from './lib/instanceColors'
   import { t } from './lib/i18n.svelte.ts'
+  import {
+    readPreference,
+    readStringArrayPreference,
+    writePreference,
+  } from './lib/preferences.ts'
+  import type { View } from './lib/view.ts'
 
-  type View = 'month' | 'week' | 'agenda'
   type ModalState = { kind: 'event'; event: EventDto } | { kind: 'day'; date: Date } | null
 
   const initialView = (): View => {
     const fromURL = new URLSearchParams(location.search).get('view')
-    const v = fromURL ?? localStorage.getItem('calthing.view')
-    return v === 'agenda' || v === 'week' || v === 'month' ? v : 'month'
+    const value = fromURL ?? readPreference('calthing.view')
+    return value === 'agenda' || value === 'week' || value === 'month' ? value : 'month'
   }
   let view = $state<View>(initialView())
   let viewDate = $state(new Date())
+  let today = $state(localStartOfDay(new Date()))
   let session = $state<'bootstrap' | 'gate' | 'ready'>('bootstrap')
   let me = $state<MeDto | null>(null)
   const queryClient = useQueryClient()
-  let hidden = $state(
-    new Set<string>(JSON.parse(localStorage.getItem('calthing.hiddenInstances') ?? '[]')),
-  )
+  let hidden = $state(new Set(readStringArrayPreference('calthing.hiddenInstances')))
   let modal = $state<ModalState>(null)
 
   $effect(() => {
-    localStorage.setItem('calthing.view', view)
-    localStorage.setItem('calthing.hiddenInstances', JSON.stringify([...hidden]))
+    writePreference('calthing.view', view)
+    writePreference('calthing.hiddenInstances', JSON.stringify([...hidden]))
+
+    const url = new URL(location.href)
+    if (url.searchParams.get('view') !== view) {
+      url.searchParams.set('view', view)
+      history.replaceState(history.state, '', url)
+    }
   })
 
-  const range = $derived.by(() => {
+  // Keep every view's local date boundary current across midnight and sleeping tabs.
+  $effect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const update = () => {
+      clearTimeout(timer)
+      const now = new Date()
+      today = localStartOfDay(now)
+      const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      timer = setTimeout(update, Math.max(1_000, nextDay.getTime() - now.getTime()))
+    }
+    update()
+    window.addEventListener('focus', update)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('focus', update)
+    }
+  })
+
+  const displayRange = $derived.by(() => {
     if (view === 'month') {
       const cells = monthGrid(viewDate)
-      return {
-        start: ymd(cells[0]),
-        end: ymd(addDays(cells[41], 1)),
-      }
+      return { start: cells[0]!, end: addDays(cells[41]!, 1) }
     }
-
     if (view === 'week') {
       const start = startOfWeek(viewDate)
-      return {
-        start: ymd(start),
-        end: ymd(addDays(start, 7)),
-      }
+      return { start, end: addDays(start, 7) }
     }
+    return { start: today, end: addDays(today, 90) }
+  })
 
-    const start = new Date()
-    return {
-      start: ymd(start),
-      end: ymd(addDays(start, 90)),
-    }
+  // The API uses UTC date windows. Pad local view boundaries so timed events near
+  // midnight are fetched in every time zone, then filter back to the exact view below.
+  const range = $derived({
+    start: ymd(addDays(displayRange.start, -1)),
+    end: ymd(addDays(displayRange.end, 1)),
   })
 
   const meQuery = createQuery(() => ({
     queryKey: ['me'] as const,
     queryFn: ({ signal }) => fetchMe(signal),
     enabled: session === 'bootstrap',
+    retry: false,
   }))
 
   const eventsQuery = createQuery(() => ({
     queryKey: ['events', range.start, range.end] as const,
     queryFn: ({ queryKey: [, start, end], signal }) => fetchEvents(start, end, signal),
-    placeholderData: (previous) => previous,
     enabled: session === 'ready',
+    retry: (failureCount, error) =>
+      !(error instanceof ApiError && error.status === 401) && failureCount < 2,
   }))
 
   function clearProtectedEvents() {
@@ -83,6 +108,7 @@
   }
 
   function requireLogin() {
+    actionError = ''
     session = 'gate'
     me = null
     clearProtectedEvents()
@@ -110,6 +136,7 @@
   }
 
   function unlock(resolved: MeDto) {
+    actionError = ''
     clearProtectedEvents()
     queryClient.setQueryData(['me'], resolved)
     me = resolved
@@ -134,7 +161,12 @@
     requireLogin()
   }
 
-  const events = $derived(eventsQuery.data?.events ?? [])
+  const events = $derived(
+    (eventsQuery.data?.events ?? []).filter((event) => {
+      const day = eventDay(event)
+      return day >= displayRange.start && day < displayRange.end
+    }),
+  )
   const instances = $derived(eventsQuery.data?.instances ?? [])
   const branding = $derived(eventsQuery.data?.branding ?? DEFAULT_BRANDING)
   const instanceColors = $derived(buildInstanceColors(instances))
@@ -168,6 +200,10 @@
       next.add(name)
     }
     hidden = next
+  }
+
+  function localStartOfDay(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate())
   }
 </script>
 
@@ -217,6 +253,7 @@
     {#if view === 'month'}
       <MonthGrid
         {viewDate}
+        {today}
         events={visible}
         {instanceColors}
         onselect={(e) => (modal = { kind: 'event', event: e })}
@@ -225,6 +262,7 @@
     {:else if view === 'week'}
       <WeekGrid
         {viewDate}
+        {today}
         events={visible}
         {instanceColors}
         onselect={(e) => (modal = { kind: 'event', event: e })}
@@ -239,11 +277,11 @@
   </main>
 
   {#if modal?.kind === 'event'}
-    <Modal onclose={() => (modal = null)}>
+    <Modal label={modal.event.title} onclose={() => (modal = null)}>
       <EventDetail event={modal.event} color={instanceColors[modal.event.instance]} />
     </Modal>
   {:else if modal?.kind === 'day'}
-    <Modal onclose={() => (modal = null)}>
+    <Modal label={dayLabel(modal.date)} onclose={() => (modal = null)}>
       <div class="day-list">
         <h2>{dayLabel(modal.date)}</h2>
         {#each dayEvents as e (e.uid)}

@@ -1,9 +1,11 @@
+import { readPreference, writePreference } from './preferences.ts'
+
 export type ThemeMode = 'light' | 'dark' | 'system'
 
 const STORAGE_KEY = 'calthing.theme'
 const media = matchMedia('(prefers-color-scheme: dark)')
 
-const stored = localStorage.getItem(STORAGE_KEY)
+const stored = readPreference(STORAGE_KEY)
 
 /** Reactive theme state; read `theme.mode` in reactive contexts, change it via `setTheme`. */
 export const theme: { mode: ThemeMode } = $state({
@@ -23,7 +25,7 @@ function apply(): void {
 
 export function setTheme(mode: ThemeMode): void {
   theme.mode = mode
-  localStorage.setItem(STORAGE_KEY, mode)
+  writePreference(STORAGE_KEY, mode)
   apply()
 }
 

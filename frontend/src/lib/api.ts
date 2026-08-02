@@ -2,8 +2,12 @@ import { treaty } from '@elysiajs/eden'
 import type { App } from '../../../src/http/app.ts'
 import type { EventsResponse, MeDto } from '../../../shared/api.ts'
 import { t } from './i18n.svelte.ts'
+import { readPreference, writePreference } from './preferences.ts'
 
 const client = treaty<App>(location.origin)
+const DEVICE_ID_KEY = 'calthing.deviceId'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+let memoryDeviceId = ''
 
 export class ApiError extends Error {
   readonly status: number
@@ -47,7 +51,11 @@ export async function fetchMe(signal: AbortSignal): Promise<MeDto> {
 
 export async function login(username: string, password: string): Promise<MeDto> {
   try {
-    const { data, error, status } = await client.api.auth.post({ username, password })
+    const { data, error, status } = await client.api.auth.post({
+      username,
+      password,
+      deviceId: browserDeviceId(),
+    })
     if (error) throw new ApiError(status, t('loadFailed', { status }))
     return data
   } catch (error) {
@@ -64,4 +72,12 @@ export async function logout(): Promise<void> {
     if (error instanceof ApiError) throw error
     throw new ApiError(0, t('signOutFailed'))
   }
+}
+
+function browserDeviceId(): string {
+  const stored = readPreference(DEVICE_ID_KEY)
+  if (stored && UUID_PATTERN.test(stored)) return stored
+  if (!memoryDeviceId) memoryDeviceId = crypto.randomUUID()
+  writePreference(DEVICE_ID_KEY, memoryDeviceId)
+  return memoryDeviceId
 }

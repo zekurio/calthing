@@ -10,10 +10,15 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <script>
       // apply theme before first paint to avoid a light flash
-      const t = localStorage.getItem('calthing.theme')
+      let savedTheme = null
+      try {
+        savedTheme = localStorage.getItem('calthing.theme')
+      } catch {
+        // Storage may be disabled; the system preference is still available.
+      }
       document.documentElement.dataset.theme =
-        t === 'dark' || t === 'light'
-          ? t
+        savedTheme === 'dark' || savedTheme === 'light'
+          ? savedTheme
           : matchMedia('(prefers-color-scheme: dark)').matches
             ? 'dark'
             : 'light'

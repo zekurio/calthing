@@ -5,7 +5,7 @@ import type { CalendarEvent } from '../domain/event.ts'
 import { generateCalendar } from '../services/ical.ts'
 import { signFeedToken, verifyFeedToken } from '../services/tokens.ts'
 import { createStaticHandler } from './static.ts'
-import type { InstanceStatusDto } from '../../shared/api.ts'
+import { type InstanceStatusDto, MAX_CALENDAR_WINDOW_DAYS } from '../../shared/api.ts'
 
 export interface AppConfig {
   cache: { ttlMs: number }
@@ -25,6 +25,7 @@ export interface AuthClient {
   authenticate(
     username: string,
     password: string,
+    deviceId: string,
   ): Promise<{ token: string; user: AuthUser } | null>
   user(token: string): Promise<AuthUser | null>
   logout(token: string): Promise<void>
@@ -112,12 +113,15 @@ const meResponseSchema = t.Object({
 const loginBodySchema = t.Object({
   username: t.String({ minLength: 1 }),
   password: t.String(),
+  deviceId: t.String({
+    pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+  }),
 })
 
 const SESSION_COOKIE = 'calthing_session'
 
 // 400 days is the maximum browsers accept; the Jellyfin token stays valid
-// until it is revoked, we just re-check it periodically.
+// until revoked and is revalidated with Jellyfin on every protected request.
 const SESSION_MAX_AGE = 60 * 60 * 24 * 400
 
 export function parseCookies(header: string | null | undefined): Record<string, string> {
@@ -170,6 +174,10 @@ function resolveWindow(
     end = parsed
   }
   if (end.getTime() <= start.getTime()) return 'end must be after start'
+  const days = (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)
+  if (days > MAX_CALENDAR_WINDOW_DAYS) {
+    return `date window must not exceed ${MAX_CALENDAR_WINDOW_DAYS} days`
+  }
   return { start, end }
 }
 
@@ -195,6 +203,7 @@ export function createApp(dependencies: AppDependencies) {
   const logger = dependencies.logger ?? defaultLogger
   const staticHandler = createStaticHandler(dependencies.staticDir)
   const requestStarted = new WeakMap<Request, number>()
+  const revokedSessions = new Set<string>()
   const authEnabled = auth !== undefined
 
   const sessionCookie = (token: string, maxAge: number = SESSION_MAX_AGE) =>
@@ -204,7 +213,7 @@ export function createApp(dependencies: AppDependencies) {
   const currentUser = async (cookieHeader: string | undefined): Promise<AuthUser | null> => {
     if (!auth) return null
     const token = parseCookies(cookieHeader)[SESSION_COOKIE]
-    if (!token) return null
+    if (!token || revokedSessions.has(token)) return null
     return await auth.user(token)
   }
 
@@ -213,6 +222,7 @@ export function createApp(dependencies: AppDependencies) {
       status: 405,
       headers: { ...errorHeaders, allow },
     })
+  const apiNotFound = () => new Response('Not Found\n', { status: 404, headers: errorHeaders })
 
   const serveStatic = async ({ request }: { request: Request }) =>
     await staticHandler(request) ??
@@ -272,7 +282,7 @@ export function createApp(dependencies: AppDependencies) {
       }
       let session: Awaited<ReturnType<AuthClient['authenticate']>>
       try {
-        session = await auth.authenticate(body.username, body.password)
+        session = await auth.authenticate(body.username, body.password, body.deviceId)
       } catch {
         Object.assign(set.headers, errorHeaders)
         return status(502, 'jellyfin unreachable\n')
@@ -281,6 +291,7 @@ export function createApp(dependencies: AppDependencies) {
         Object.assign(set.headers, errorHeaders)
         return status(401, 'unauthorized\n')
       }
+      revokedSessions.delete(session.token)
       set.headers['set-cookie'] = sessionCookie(session.token)
       set.headers['content-type'] = 'application/json; charset=utf-8'
       return {
@@ -304,6 +315,7 @@ export function createApp(dependencies: AppDependencies) {
 
       const token = parseCookies(headers.cookie)[SESSION_COOKIE]
       if (token && auth) {
+        rememberRevokedSession(revokedSessions, token)
         try {
           void auth.logout(token).catch(() => {})
         } catch {
@@ -384,6 +396,9 @@ export function createApp(dependencies: AppDependencies) {
     .all('/api/auth', methodNotAllowed('POST'))
     .all('/api/logout', methodNotAllowed('POST'))
     .all('/calendar.ics', methodNotAllowed('GET, HEAD'))
+    .head('/api/*', apiNotFound)
+    .get('/api/*', apiNotFound)
+    .all('/api/*', apiNotFound)
     .head('/', serveStatic)
     .get('/', serveStatic)
     .head('/*', serveStatic)
@@ -393,3 +408,15 @@ export function createApp(dependencies: AppDependencies) {
 }
 
 export type App = ReturnType<typeof createApp>
+
+function rememberRevokedSession(sessions: Set<string>, token: string): void {
+  // Bound attacker-controlled cookie values while retaining recent local logout tombstones.
+  const maxEntries = 1_024
+  sessions.delete(token)
+  sessions.add(token)
+  while (sessions.size > maxEntries) {
+    const oldest = sessions.values().next().value
+    if (oldest === undefined) break
+    sessions.delete(oldest)
+  }
+}

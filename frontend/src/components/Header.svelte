@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { BrandingDto, InstanceStatusDto, MeDto } from '../../../shared/api.ts'
   import { DEFAULT_ICON_URL } from '../lib/branding.ts'
+  import { t } from '../lib/i18n.svelte.ts'
+  import type { View } from '../lib/view.ts'
   import CalendarNavigation from './header/CalendarNavigation.svelte'
-  import type { View } from './header/types.ts'
+  import SegmentedControl from './header/SegmentedControl.svelte'
+  import type { SegmentOption } from './header/types.ts'
   import UserMenu from './header/UserMenu.svelte'
-  import ViewSwitcher from './header/ViewSwitcher.svelte'
 
   let {
     view,
@@ -34,16 +36,26 @@
     onsignout: () => void
   } = $props()
 
-  let customBrandIconFailed = $state(false)
+  let failedBrandIcon = $state('')
+  const brandIcon = $derived(
+    branding.iconUrl && failedBrandIcon !== branding.iconUrl ? branding.iconUrl : DEFAULT_ICON_URL,
+  )
+  const viewOptions: readonly SegmentOption<View>[] = $derived([
+    { value: 'month', label: t('viewMonth') },
+    { value: 'week', label: t('viewWeek') },
+    { value: 'agenda', label: t('viewAgenda') },
+  ])
 </script>
 
 <header>
   <div class="brand">
     <span class="tile" aria-hidden="true">
       <img
-        src={branding.iconUrl && !customBrandIconFailed ? branding.iconUrl : DEFAULT_ICON_URL}
+        src={brandIcon}
         alt=""
-        onerror={() => (customBrandIconFailed = true)}
+        onerror={() => {
+          if (branding.iconUrl && brandIcon === branding.iconUrl) failedBrandIcon = brandIcon
+        }}
       />
     </span>
     <h1 class="brand-name">{branding.name}</h1>
@@ -53,7 +65,13 @@
 
   <div class="spacer"></div>
 
-  <ViewSwitcher {view} {onview} />
+  <SegmentedControl
+    value={view}
+    options={viewOptions}
+    label={t('view')}
+    onchange={onview}
+    variant="topbar"
+  />
 
   <UserMenu
     {instances}

@@ -55,14 +55,12 @@ export function createStaticHandler(
     if (!file) return undefined
 
     const headers = new Headers({
-      'cache-control': relative.startsWith('assets/') ? immutableCache : 'no-cache',
+      'cache-control': isHashedAsset(relative) ? immutableCache : 'no-cache',
       'content-type': contentType(relative),
       'x-content-type-options': 'nosniff',
     })
-    if (request.method === 'HEAD') {
-      // The compressed GET representation has a different size, so do not advertise source bytes.
-      return new Response(null, { headers })
-    }
+    // Return the representation for HEAD too: Deno suppresses the wire body while using it
+    // to produce the same compression and length metadata as the corresponding GET.
     return new Response(await files.readFile(file.path), { headers })
   }
 }
@@ -92,6 +90,10 @@ function safeSegments(pathname: string): string[] | undefined {
 function hasExtension(relative: string): boolean {
   const name = relative.slice(relative.lastIndexOf('/') + 1)
   return name.lastIndexOf('.') > 0
+}
+
+function isHashedAsset(relative: string): boolean {
+  return /^assets\/.+-[A-Za-z0-9_-]{8,}\.[^/]+$/.test(relative)
 }
 
 async function regularFile(

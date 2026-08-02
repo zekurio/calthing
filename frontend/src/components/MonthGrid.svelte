@@ -7,12 +7,14 @@
 
   let {
     viewDate,
+    today,
     events,
     onselect,
     onselectday,
     instanceColors,
   }: {
     viewDate: Date
+    today: Date
     events: EventDto[]
     onselect: (e: EventDto) => void
     onselectday: (d: Date) => void
@@ -23,8 +25,6 @@
 
   const cells = $derived(monthGrid(viewDate))
   const byDay = $derived(groupEventsByDay(events))
-
-  const today = new Date()
 </script>
 
 <div class="grid" role="grid" aria-label={t('viewMonth')}>

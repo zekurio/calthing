@@ -1,11 +1,12 @@
 import type { Kind } from '../../../shared/api.ts'
+import { readPreference, writePreference } from './preferences.ts'
 
 export type Locale = 'de' | 'en'
 
 const STORAGE_KEY = 'calthing.locale'
 
 function initialLocale(): Locale {
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const stored = readPreference(STORAGE_KEY)
   if (stored === 'de' || stored === 'en') return stored
   return navigator.language.toLowerCase().startsWith('de') ? 'de' : 'en'
 }
@@ -16,7 +17,7 @@ document.documentElement.lang = i18n.locale
 
 export function setLocale(locale: Locale): void {
   i18n.locale = locale
-  localStorage.setItem(STORAGE_KEY, locale)
+  writePreference(STORAGE_KEY, locale)
   document.documentElement.lang = locale
 }
 

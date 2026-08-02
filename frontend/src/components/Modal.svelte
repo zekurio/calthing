@@ -2,49 +2,67 @@
   import type { Snippet } from 'svelte'
   import { t } from '../lib/i18n.svelte.ts'
 
-  let { onclose, children }: { onclose: () => void; children: Snippet } = $props()
+  let {
+    label,
+    onclose,
+    children,
+  }: { label: string; onclose: () => void; children: Snippet } = $props()
 
-  function onkeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') onclose()
-  }
+  let dialog = $state<HTMLDialogElement>()
+
+  $effect(() => {
+    if (!dialog) return
+    const previousFocus = document.activeElement
+    dialog.showModal()
+    return () => {
+      if (dialog?.open) dialog.close()
+      if (previousFocus instanceof HTMLElement) previousFocus.focus()
+    }
+  })
 </script>
 
-<svelte:window {onkeydown} />
-
-<div
-  class="backdrop"
-  onclick={(e) => {
-    if (e.target === e.currentTarget) onclose()
+<dialog
+  bind:this={dialog}
+  aria-label={label}
+  oncancel={(event) => {
+    event.preventDefault()
+    onclose()
   }}
-  role="presentation"
+  onclick={(event) => {
+    if (event.target === event.currentTarget) onclose()
+  }}
 >
-  <div class="dialog" role="dialog" aria-modal="true" tabindex="-1">
+  <div class="surface">
     <button class="close" onclick={onclose} aria-label={t('close')}>✕</button>
     {@render children()}
   </div>
-</div>
+</dialog>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    z-index: 10;
+  dialog {
+    max-width: calc(100vw - 32px);
+    max-height: 85vh;
+    margin: auto;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    color: inherit;
   }
 
-  .dialog {
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.55);
+  }
+
+  .surface {
     position: relative;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 20px;
     max-width: min(560px, 100%);
     max-height: 85vh;
+    padding: 20px;
     overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
     box-shadow: 0 20px 60px rgb(0 0 0 / 0.4);
   }
 
@@ -52,13 +70,14 @@
     position: absolute;
     top: 10px;
     right: 10px;
+    z-index: 1;
+    display: flex;
     width: 30px;
     height: 30px;
-    border-radius: 8px;
-    color: var(--muted);
-    display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 8px;
+    color: var(--muted);
   }
 
   .close:hover {

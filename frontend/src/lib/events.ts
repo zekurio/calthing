@@ -1,7 +1,7 @@
 import type { EventDto } from '../../../shared/api.ts'
 import { eventDay, ymd } from './dates.ts'
 
-export function groupEventsByDay(events: EventDto[]): Map<string, EventDto[]> {
+export function groupEventsByDay(events: readonly EventDto[]): Map<string, EventDto[]> {
   const groups = new Map<string, EventDto[]>()
 
   for (const event of events) {

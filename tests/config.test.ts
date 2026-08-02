@@ -272,6 +272,13 @@ instances:
   - {name: x, type: radarr, url: 'http://a', api_key: k}`,
       'past_days and future_days must be >= 0',
     ],
+    [
+      'oversized default window',
+      `calendar: {past_days: 200, future_days: 200}
+instances:
+  - {name: x, type: radarr, url: 'http://a', api_key: k}`,
+      'default window must not exceed 370 days',
+    ],
   ]
 
   for (const [name, yaml, message] of cases) {
