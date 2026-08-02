@@ -15,6 +15,7 @@ DESCRIPTION:Things begin\, dramatically.\nWith a newline\, a comma\, and
   a\; semicolon.
 CATEGORIES:tv
 DTSTART:20260715T200000Z
+DTEND:20260715T204500Z
 END:VEVENT
 BEGIN:VEVENT
 UID:radarr-movies-42-digital@calthing
