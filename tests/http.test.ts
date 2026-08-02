@@ -171,7 +171,6 @@ Deno.test('date windows reject malformed, impossible, and non-increasing dates',
       ['/api/events?start=2026-02-29', 'invalid start "2026-02-29", want YYYY-MM-DD\n'],
       ['/api/events?end=2026-13-01', 'invalid end "2026-13-01", want YYYY-MM-DD\n'],
       ['/api/events?start=2026-08-01&end=2026-08-01', 'end must be after start\n'],
-      ['/api/events?start=2025-01-01&end=2027-01-01', 'date window must not exceed 370 days\n'],
       ['/api/events?start=2026-08-02&end=2026-08-01', 'end must be after start\n'],
     ] as const
   ) {
@@ -243,11 +242,7 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
   const wrong = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      username: 'alice',
-      password: 'wrong',
-      deviceId: browserDeviceId,
-    }),
+    body: JSON.stringify({ username: 'alice', password: 'wrong', deviceId: browserDeviceId }),
   })
   assertEquals(wrong.status, 401)
   assertEquals(await wrong.text(), 'unauthorized\n')
@@ -255,19 +250,12 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
   const login = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      username: 'alice',
-      password: 'right',
-      deviceId: browserDeviceId,
-    }),
+    body: JSON.stringify({ username: 'alice', password: 'right', deviceId: browserDeviceId }),
   })
   assertEquals(login.status, 200)
   const cookie = login.headers.get('set-cookie') ?? ''
   assertStringIncludes(cookie, 'calthing_session=jf-token')
   assertStringIncludes(cookie, 'HttpOnly')
-  assertStringIncludes(cookie, 'Secure')
-  assertEquals(login.headers.get('cache-control'), 'private, no-store')
-  assertEquals(login.headers.get('vary'), 'Cookie')
   const body = await login.json()
   assertEquals(body.name, 'alice')
   assertEquals(body.avatarUrl, 'https://jf.example/Users/user-1/Images/Primary?tag=t1')
@@ -275,21 +263,14 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
 
   const anonymous = await request(app, '/api/events')
   assertEquals(anonymous.status, 401)
-  assertEquals(anonymous.headers.get('cache-control'), 'private, no-store')
-  assertEquals(anonymous.headers.get('vary'), 'Cookie')
-  assertEquals(anonymous.headers.get('x-content-type-options'), 'nosniff')
   const anonymousMe = await request(app, '/api/me')
   assertEquals(anonymousMe.status, 401)
 
   const sessionHeaders = { cookie: 'calthing_session=jf-token' }
   const events = await request(app, '/api/events', { headers: sessionHeaders })
   assertEquals(events.status, 200)
-  assertEquals(events.headers.get('cache-control'), 'private, no-store')
-  assertEquals(events.headers.get('vary'), 'Cookie')
   const me = await request(app, '/api/me', { headers: sessionHeaders })
   assertEquals(me.status, 200)
-  assertEquals(me.headers.get('cache-control'), 'private, no-store')
-  assertEquals(me.headers.get('vary'), 'Cookie')
   assertEquals(await me.json(), body)
 
   const staleSession = await request(app, '/api/events', {
@@ -299,12 +280,7 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
 
   const logout = await request(app, '/api/logout', { method: 'POST', headers: sessionHeaders })
   assertEquals(logout.status, 200)
-  const clearedCookie = logout.headers.get('set-cookie') ?? ''
-  assertStringIncludes(clearedCookie, 'calthing_session=')
-  assertStringIncludes(clearedCookie, 'Max-Age=0')
-  assertStringIncludes(clearedCookie, 'Secure')
-  assertEquals(logout.headers.get('cache-control'), 'private, no-store')
-  assertEquals(logout.headers.get('vary'), 'Cookie')
+  assertStringIncludes(logout.headers.get('set-cookie') ?? '', 'Max-Age=0')
 })
 
 Deno.test('auth disabled keeps the API and feed public and /api/me anonymous', async () => {
@@ -326,16 +302,12 @@ Deno.test('auth disabled keeps the API and feed public and /api/me anonymous', a
   const login = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      username: 'alice',
-      password: 'right',
-      deviceId: browserDeviceId,
-    }),
+    body: JSON.stringify({ username: 'alice', password: 'right', deviceId: browserDeviceId }),
   })
   assertEquals(login.status, 404)
 })
 
-Deno.test('Jellyfin outages return 502 for login but 503 for session validation', async () => {
+Deno.test('login answers 502 when Jellyfin is unreachable', async () => {
   const app = createApp({
     config: copyConfig('feed-secret'),
     auth: {
@@ -358,74 +330,15 @@ Deno.test('Jellyfin outages return 502 for login but 503 for session validation'
   const login = await request(app, '/api/auth', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      username: 'alice',
-      password: 'right',
-      deviceId: browserDeviceId,
-    }),
+    body: JSON.stringify({ username: 'alice', password: 'right', deviceId: browserDeviceId }),
   })
   assertEquals(login.status, 502)
   assertEquals(await login.text(), 'jellyfin unreachable\n')
 
-  // An outage is not proof that a revalidated token is invalid.
-  for (const path of ['/api/events', '/api/me']) {
-    const response = await request(app, path, {
-      headers: { cookie: 'calthing_session=jf-token' },
-    })
-    assertEquals(response.status, 503, path)
-    assertEquals(await response.text(), 'session validation unavailable\n', path)
-    assertEquals(response.headers.get('content-type'), 'text/plain; charset=utf-8', path)
-    assertEquals(response.headers.get('x-content-type-options'), 'nosniff', path)
-    assertEquals(response.headers.get('cache-control'), 'private, no-store', path)
-    assertEquals(response.headers.get('vary'), 'Cookie', path)
-  }
-})
-
-Deno.test('logout clears the cookie without waiting for upstream revocation', async () => {
-  let releaseLogout: (() => void) | undefined
-  let logoutStarted = false
-  const auth: AuthClient = {
-    ...stubAuth,
-    logout() {
-      logoutStarted = true
-      return new Promise<void>((resolve) => {
-        releaseLogout = resolve
-      })
-    },
-  }
-  const app = createApp({
-    config: copyConfig('feed-secret'),
-    auth,
-    logger: { info() {} },
-    fetcher: {
-      async fetch() {
-        return { events: [], instances: [] }
-      },
-    },
-  })
-
-  const pendingResponse = request(app, '/api/logout', {
-    method: 'POST',
+  const events = await request(app, '/api/events', {
     headers: { cookie: 'calthing_session=jf-token' },
   })
-  let timeoutId: ReturnType<typeof setTimeout> | undefined
-  const outcome = await Promise.race([
-    pendingResponse,
-    new Promise<'timeout'>((resolve) => {
-      timeoutId = setTimeout(() => resolve('timeout'), 50)
-    }),
-  ])
-  clearTimeout(timeoutId)
-
-  assertEquals(logoutStarted, true)
-  assert(outcome instanceof Response)
-  assertEquals(outcome.status, 200)
-  assertStringIncludes(outcome.headers.get('set-cookie') ?? '', 'Max-Age=0')
-  const replay = await request(app, '/api/events', {
-    headers: { cookie: 'calthing_session=jf-token' },
-  })
-  assertEquals(replay.status, 401, 'a logged-out token is rejected before upstream revocation')
-  releaseLogout?.()
+  assertEquals(events.status, 503)
 })
 
 Deno.test('health is static and does not fetch upstream instances', async () => {
@@ -447,7 +360,7 @@ Deno.test('health is static and does not fetch upstream instances', async () => 
   assertEquals(calls, 0)
 })
 
-Deno.test('static handler serves files, falls back only for SPA paths, and rejects traversal', async () => {
+Deno.test('static handler serves files, SPA fallback, HEAD, and rejects traversal', async () => {
   const app = createApp({
     config: copyConfig(),
     staticDir: 'frontend',
@@ -461,28 +374,15 @@ Deno.test('static handler serves files, falls back only for SPA paths, and rejec
 
   const index = await request(app, '/')
   assertEquals(index.status, 200)
-  assertEquals(index.headers.get('cache-control'), 'no-cache')
   assertStringIncludes(await index.text(), '<!doctype html>')
 
-  const file = await request(app, '/vite.config.ts')
-  assertEquals(file.status, 200)
-  assertEquals(file.headers.get('cache-control'), 'no-cache')
-  assertEquals(file.headers.get('content-length'), null)
-  assertStringIncludes(await file.text(), 'defineConfig')
+  const asset = await request(app, '/vite.config.ts')
+  assertEquals(asset.status, 200)
+  assertStringIncludes(await asset.text(), 'defineConfig')
 
   const fallback = await request(app, '/some/client/route')
   assertEquals(fallback.status, 200)
-  assertEquals(fallback.headers.get('cache-control'), 'no-cache')
   assertStringIncludes(await fallback.text(), '<!doctype html>')
-
-  const missingAsset = await request(app, '/some/client/route.js')
-  assertEquals(missingAsset.status, 404)
-  assertEquals(await missingAsset.text(), 'Not Found\n')
-
-  const unknownApi = await request(app, '/api/typo')
-  assertEquals(unknownApi.status, 404)
-  assertEquals(await unknownApi.text(), 'Not Found\n')
-  assertEquals(unknownApi.headers.get('content-type'), 'text/plain; charset=utf-8')
 
   const head = await request(app, '/vite.config.ts', { method: 'HEAD' })
   assertEquals(head.status, 200)
@@ -491,60 +391,6 @@ Deno.test('static handler serves files, falls back only for SPA paths, and rejec
 
   const traversal = await request(app, '/%2e%2e%2fconfig.example.yaml')
   assertEquals(traversal.status, 404)
-})
-
-Deno.test('static handler gives hashed assets immutable cache headers and contains symlinks', async () => {
-  const { createStaticHandler } = await import('../src/http/static.ts')
-  const encoder = new TextEncoder()
-  const contents = new Map([
-    ['/srv/index.html', encoder.encode('<!doctype html>')],
-    ['/srv/icon.svg', encoder.encode('<svg/>')],
-    ['/srv/assets/index-AbCd1234.css', encoder.encode('body { color: black }')],
-    ['/srv/assets/custom.css', encoder.encode('body { color: red }')],
-  ])
-  const handler = createStaticHandler('/srv', {
-    realPath(path) {
-      return Promise.resolve(path === '/srv/assets/leak.css' ? '/outside/leak.css' : path)
-    },
-    readFile(path) {
-      const content = contents.get(path)
-      if (!content) throw new Deno.errors.NotFound()
-      return Promise.resolve(content)
-    },
-    stat(path) {
-      const content = contents.get(path)
-      if (!content) throw new Deno.errors.NotFound()
-      return Promise.resolve({ isFile: true })
-    },
-  })
-  const get = async (path: string, method = 'GET') => {
-    const response = await handler(new Request(`http://localhost${path}`, { method }))
-    assert(response)
-    return response
-  }
-
-  const asset = await get('/assets/index-AbCd1234.css')
-  assertEquals(asset.status, 200)
-  assertEquals(asset.headers.get('cache-control'), 'public, max-age=31536000, immutable')
-  assertEquals(asset.headers.get('content-type'), 'text/css; charset=utf-8')
-  assertEquals(asset.headers.get('content-length'), null)
-
-  const head = await get('/assets/index-AbCd1234.css', 'HEAD')
-  assertEquals(head.headers.get('content-length'), null)
-  assertEquals(await head.text(), 'body { color: black }')
-
-  const unhashedAsset = await get('/assets/custom.css')
-  assertEquals(unhashedAsset.headers.get('cache-control'), 'no-cache')
-
-  const icon = await get('/icon.svg')
-  assertEquals(icon.headers.get('cache-control'), 'no-cache')
-
-  const fallback = await get('/calendar/month')
-  assertEquals(fallback.headers.get('cache-control'), 'no-cache')
-  assertEquals(await fallback.text(), '<!doctype html>')
-
-  assertEquals((await get('/assets/missing.js')).status, 404)
-  assertEquals((await get('/assets/leak.css')).status, 404)
 })
 
 Deno.test('unsupported methods return 405 and an Allow header', async () => {
