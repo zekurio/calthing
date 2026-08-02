@@ -23,6 +23,22 @@ function itemAt<T>(items: readonly T[], index: number): T {
   return item
 }
 
+function physicalPropertyLines(calendar: string, name: string): string[] {
+  const lines = calendar.split('\r\n')
+  const propertyIndex = lines.findIndex((line) => line.startsWith(`${name}:`))
+  if (propertyIndex < 0) {
+    throw new Error(`missing ${name} property`)
+  }
+
+  const propertyLines = [itemAt(lines, propertyIndex)]
+  for (let index = propertyIndex + 1; index < lines.length; index++) {
+    const line = itemAt(lines, index)
+    if (!line.startsWith(' ')) break
+    propertyLines.push(line)
+  }
+  return propertyLines
+}
+
 function fixtureEvents(): CalendarEvent[] {
   return [
     {
@@ -94,6 +110,7 @@ Deno.test('generateCalendar emits metadata, summaries, escaping, and date forms'
       'DESCRIPTION:Things begin\\, dramatically.\\nWith a newline\\, a comma\\, and\r\n  a\\; semicolon.\r\n',
       'CATEGORIES:tv\r\n',
       'DTSTART:20260715T200000Z\r\n',
+      'DTEND:20260715T204500Z\r\n',
       'DTSTART;VALUE=DATE:20260720\r\n',
       'DTEND;VALUE=DATE:20260721\r\n',
     ]
@@ -103,6 +120,72 @@ Deno.test('generateCalendar emits metadata, summaries, escaping, and date forms'
 
   assertEquals(output.replaceAll('\r\n', '').includes('\n'), false, 'output contains a bare LF')
   assert(output.endsWith('END:VCALENDAR\r\n'), 'calendar must end with CRLF')
+})
+
+Deno.test('generateCalendar preserves the exact duration of timed events', () => {
+  const event: CalendarEvent = {
+    ...itemAt(fixtureEvents(), 0),
+    start: new Date('2026-08-01T09:12:34Z'),
+    end: new Date('2026-08-01T11:47:56Z'),
+  }
+  const output = generateCalendar('Duration', [event], fixedNow)
+  const dateLines = output.split('\r\n').filter((line) =>
+    line.startsWith('DTSTART:') || line.startsWith('DTEND:')
+  )
+
+  assertEquals(
+    dateLines.join('\r\n'),
+    'DTSTART:20260801T091234Z\r\nDTEND:20260801T114756Z',
+  )
+})
+
+Deno.test('generateCalendar escapes every text newline without injecting properties', () => {
+  const event: CalendarEvent = {
+    ...itemAt(fixtureEvents(), 0),
+    title: 'Safe\r\nATTENDEE:evil\rSUMMARY:evil\nEND:VEVENT',
+    subtitle: '',
+    overview: 'first\r\nATTENDEE:evil\rDTEND:evil\nBEGIN:VEVENT',
+  }
+  const output = generateCalendar('Calendar\r\nX-WR-CALNAME:evil', [event], fixedNow)
+
+  assert(
+    output.includes('NAME:Calendar\\nX-WR-CALNAME:evil\r\n'),
+    'calendar name line endings were not escaped',
+  )
+  assert(
+    output.includes(
+      'SUMMARY:Safe\\nATTENDEE:evil\\nSUMMARY:evil\\nEND:VEVENT S02E05\r\n',
+    ),
+    'summary line endings were not escaped',
+  )
+  assert(
+    output.includes(
+      'DESCRIPTION:first\\nATTENDEE:evil\\nDTEND:evil\\nBEGIN:VEVENT\r\n',
+    ),
+    'description line endings were not escaped',
+  )
+  assertEquals(output.split('\r\n').filter((line) => line === 'ATTENDEE:evil').length, 0)
+  assertEquals(output.split('\r\n').filter((line) => line === 'BEGIN:VEVENT').length, 1)
+  assertEquals(output.split('\r\n').filter((line) => line === 'END:VEVENT').length, 1)
+})
+
+Deno.test('generateCalendar removes forbidden control characters from text', () => {
+  const controls = Array.from(
+    { length: 32 },
+    (_, codePoint) =>
+      codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d
+        ? ''
+        : String.fromCharCode(codePoint),
+  ).join('') + '\u007f'
+  const event: CalendarEvent = {
+    ...itemAt(fixtureEvents(), 0),
+    title: `before${controls}after`,
+    subtitle: '',
+    overview: '',
+  }
+  const output = generateCalendar('Controls', [event], fixedNow)
+
+  assertEquals(physicalPropertyLines(output, 'SUMMARY').join('\r\n'), 'SUMMARY:beforeafter S02E05')
 })
 
 Deno.test('generateCalendar renders every movie summary and omits empty descriptions', () => {
@@ -144,6 +227,42 @@ Deno.test('generateCalendar links episodes available on Jellyfin', () => {
   )
 })
 
+Deno.test('generateCalendar keeps multibyte characters intact at the 75-octet boundary', () => {
+  const base = itemAt(fixtureEvents(), 0)
+  const exactBoundary: CalendarEvent = {
+    ...base,
+    uid: 'exact-boundary',
+    title: `${'a'.repeat(65)}é`,
+    subtitle: '',
+    overview: '',
+  }
+  const acrossBoundary: CalendarEvent = {
+    ...base,
+    uid: 'across-boundary',
+    title: `${'a'.repeat(66)}é`,
+    subtitle: '',
+    overview: '',
+  }
+
+  const exactLines = physicalPropertyLines(
+    generateCalendar('Fold', [exactBoundary], fixedNow),
+    'SUMMARY',
+  )
+  assertEquals(
+    exactLines.join('\r\n'),
+    `SUMMARY:${'a'.repeat(65)}é\r\n  S02E05`,
+  )
+
+  const acrossLines = physicalPropertyLines(
+    generateCalendar('Fold', [acrossBoundary], fixedNow),
+    'SUMMARY',
+  )
+  assertEquals(
+    acrossLines.join('\r\n'),
+    `SUMMARY:${'a'.repeat(66)}\r\n é S02E05`,
+  )
+})
+
 Deno.test('generateCalendar folds at UTF-8 byte boundaries and preserves content', () => {
   const event: CalendarEvent = {
     ...itemAt(fixtureEvents(), 0),
@@ -173,6 +292,29 @@ Deno.test('generateCalendar folds at UTF-8 byte boundaries and preserves content
   const unfolded = itemAt(summaryLines, 0) +
     summaryLines.slice(1).map((line) => line.slice(1)).join('')
   assertEquals(unfolded, `SUMMARY:${event.title} S02E05`)
+})
+
+Deno.test('generateCalendar folds long content in linear-sized exact segments', () => {
+  const title = 'x'.repeat(100_000)
+  const event: CalendarEvent = {
+    ...itemAt(fixtureEvents(), 0),
+    uid: 'long-fold',
+    title,
+    subtitle: '',
+    overview: '',
+  }
+  const summaryLines = physicalPropertyLines(
+    generateCalendar('Long', [event], fixedNow),
+    'SUMMARY',
+  )
+
+  assertEquals(summaryLines.length, 1_352)
+  assertEquals(itemAt(summaryLines, 0), `SUMMARY:${'x'.repeat(67)}`)
+  assertEquals(itemAt(summaryLines, 1), ` ${'x'.repeat(74)}`)
+  assertEquals(itemAt(summaryLines, summaryLines.length - 1), ` ${'x'.repeat(33)} S02E05`)
+  const unfolded = itemAt(summaryLines, 0) +
+    summaryLines.slice(1).map((line) => line.slice(1)).join('')
+  assertEquals(unfolded, `SUMMARY:${title} S02E05`)
 })
 
 Deno.test('generateCalendar is deterministic for an injected timestamp', () => {

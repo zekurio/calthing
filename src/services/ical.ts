@@ -1,63 +1,113 @@
 import { type CalendarEvent, sxxEyy } from '../domain/event.ts'
 
 const CRLF = '\r\n'
-const encoder = new TextEncoder()
 
-function byteLength(value: string): number {
-  return encoder.encode(value).length
-}
-
-function takeFoldSegment(value: string, maxBytes: number): string {
-  let byteCount = 0
-  let codeUnitIndex = 0
-  let lastWordBoundary = -1
-  let lastCharacter = ''
-
-  for (const character of value) {
-    if (character === ' ' || character === '<' || lastCharacter === '>') {
-      lastWordBoundary = codeUnitIndex
-    }
-    lastCharacter = character
-
-    const nextByteCount = byteCount + byteLength(character)
-    if (nextByteCount > maxBytes) {
-      break
-    }
-    byteCount = nextByteCount
-    codeUnitIndex += character.length
-  }
-
-  return lastWordBoundary > 0 ? value.slice(0, lastWordBoundary) : value.slice(0, codeUnitIndex)
+function utf8ByteLength(character: string): number {
+  const codePoint = character.codePointAt(0)
+  if (codePoint === undefined || codePoint <= 0x7f) return 1
+  if (codePoint <= 0x7ff) return 2
+  if (codePoint <= 0xffff) return 3
+  return 4
 }
 
 function foldLine(line: string): string {
-  if (byteLength(line) <= 75) {
-    return line + CRLF
+  const segments: string[] = []
+  let segmentStart = 0
+  let segmentStartByte = 0
+  let codeUnitIndex = 0
+  let byteIndex = 0
+  let lastWordBoundary = -1
+  let lastWordBoundaryByte = -1
+  let lastCharacter = ''
+
+  for (const character of line) {
+    if (character === ' ' || character === '<' || lastCharacter === '>') {
+      lastWordBoundary = codeUnitIndex
+      lastWordBoundaryByte = byteIndex
+    }
+
+    const characterBytes = utf8ByteLength(character)
+    // Continuation whitespace consumes one of the RFC's 75 allowed octets.
+    let maxBytes = segments.length === 0 ? 75 : 74
+    while (byteIndex - segmentStartByte + characterBytes > maxBytes) {
+      const useWordBoundary = lastWordBoundary > segmentStart
+      const foldIndex = useWordBoundary ? lastWordBoundary : codeUnitIndex
+      const foldByte = useWordBoundary ? lastWordBoundaryByte : byteIndex
+      const continuation = segments.length === 0 ? '' : ' '
+      segments.push(continuation + line.slice(segmentStart, foldIndex))
+      segmentStart = foldIndex
+      segmentStartByte = foldByte
+      lastWordBoundary = -1
+      lastWordBoundaryByte = -1
+      maxBytes = 74
+    }
+
+    byteIndex += characterBytes
+    codeUnitIndex += character.length
+    lastCharacter = character
   }
 
-  const first = takeFoldSegment(line, 75)
-  let output = first + CRLF
-  let remainder = line.slice(first.length)
+  const continuation = segments.length === 0 ? '' : ' '
+  segments.push(continuation + line.slice(segmentStart))
+  return segments.join(CRLF) + CRLF
+}
 
-  while (byteLength(remainder) > 74) {
-    const segment = takeFoldSegment(remainder, 74)
-    output += ` ${segment}${CRLF}`
-    remainder = remainder.slice(segment.length)
-  }
-
-  return `${output} ${remainder}${CRLF}`
+function isForbiddenControl(codeUnit: number): boolean {
+  // RFC 5545 excludes every ASCII control except horizontal tab.
+  return codeUnit < 0x09 || (codeUnit > 0x09 && codeUnit < 0x20) || codeUnit === 0x7f
 }
 
 function escapeText(value: string): string {
-  return value
-    .replaceAll('\\', '\\\\')
-    .replaceAll('\n', '\\n')
-    .replaceAll(';', '\\;')
-    .replaceAll(',', '\\,')
+  const parts: string[] = []
+  let runStart = 0
+
+  for (let index = 0; index < value.length; index++) {
+    const characterIndex = index
+    const codeUnit = value.charCodeAt(index)
+    let replacement: string | undefined
+
+    if (codeUnit === 0x0d) {
+      if (value.charCodeAt(index + 1) === 0x0a) index++
+      replacement = '\\n'
+    } else if (codeUnit === 0x0a) {
+      replacement = '\\n'
+    } else if (isForbiddenControl(codeUnit)) {
+      replacement = ''
+    } else if (codeUnit === 0x5c) {
+      replacement = '\\\\'
+    } else if (codeUnit === 0x3b) {
+      replacement = '\\;'
+    } else if (codeUnit === 0x2c) {
+      replacement = '\\,'
+    }
+
+    if (replacement !== undefined) {
+      parts.push(value.slice(runStart, characterIndex), replacement)
+      runStart = index + 1
+    }
+  }
+
+  parts.push(value.slice(runStart))
+  return parts.join('')
+}
+
+function stripForbiddenControls(value: string): string {
+  const parts: string[] = []
+  let runStart = 0
+
+  for (let index = 0; index < value.length; index++) {
+    if (!isForbiddenControl(value.charCodeAt(index))) continue
+    parts.push(value.slice(runStart, index))
+    runStart = index + 1
+  }
+
+  parts.push(value.slice(runStart))
+  return parts.join('')
 }
 
 function property(name: string, value: string, text = true): string {
-  return foldLine(`${name}:${text ? escapeText(value) : value}`)
+  const safeValue = text ? escapeText(value) : stripForbiddenControls(value)
+  return foldLine(`${name}:${safeValue}`)
 }
 
 function pad(value: number): string {
@@ -131,6 +181,7 @@ export function generateCalendar(
       output += foldLine(`DTEND;VALUE=DATE:${calendarDate(event.end)}`)
     } else {
       output += foldLine(`DTSTART:${utcTimestamp(event.start)}`)
+      output += foldLine(`DTEND:${utcTimestamp(event.end)}`)
     }
     output += 'END:VEVENT' + CRLF
   }
