@@ -74,6 +74,29 @@ Deno.test('importing main does not start a server and buildApp wires health with
   assertEquals(await response.json(), { status: 'ok', instances: 0 })
 })
 
+Deno.test('main enables Deno automatic response compression', async () => {
+  const served: Deno.ServeTcpOptions[] = []
+  await main(
+    ['--config=config.example.yaml'],
+    {
+      RADARR_API_KEY: 'radarr-key',
+      SONARR_API_KEY: 'sonarr-key',
+      JELLYFIN_API_KEY: 'jellyfin-key',
+      VAR: 'example',
+      CALTHING_STATIC_DIR: 'frontend',
+    },
+    (options) => {
+      served.push(options)
+      return { finished: Promise.resolve() }
+    },
+  )
+
+  assertEquals(served.length, 1)
+  assertEquals(served[0]?.hostname, '0.0.0.0')
+  assertEquals(served[0]?.port, 8080)
+  assertEquals(served[0]?.automaticCompression, true)
+})
+
 Deno.test('main reports config read failures instead of starting the listener', async () => {
   await assertRejects(
     () =>

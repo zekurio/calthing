@@ -13,6 +13,11 @@ export interface CliOptions {
   staticDir: string
 }
 
+export type Serve = (
+  options: Deno.ServeTcpOptions,
+  handler: Deno.ServeHandler<Deno.NetAddr>,
+) => { finished: Promise<void> }
+
 export function parseListen(value: string): ListenAddress {
   let hostname: string
   let portText: string
@@ -101,6 +106,7 @@ export function buildApp(config: Config, staticDir?: string) {
 export async function main(
   args: readonly string[] = Deno.args,
   env: Record<string, string | undefined> = Deno.env.toObject(),
+  serve: Serve = Deno.serve,
 ): Promise<void> {
   const options = parseArgs(args, env)
   const config = await loadConfig(options.configPath, env)
@@ -110,7 +116,10 @@ export async function main(
   const removeSignalListeners = installShutdownSignals(controller)
 
   console.info('listening', { addr: config.listen, instances: config.instances.length })
-  const server = Deno.serve({ ...address, signal: controller.signal }, app.fetch)
+  const server = serve(
+    { ...address, signal: controller.signal, automaticCompression: true },
+    app.fetch,
+  )
   try {
     await server.finished
   } finally {

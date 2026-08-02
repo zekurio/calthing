@@ -31,6 +31,7 @@ let
       ../deno.json
       ../deno.lock
       ../frontend/index.html
+      ../frontend/public
       ../frontend/src
       ../frontend/svelte.config.js
       ../frontend/tsconfig.json
