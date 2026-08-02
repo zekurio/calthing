@@ -9,11 +9,21 @@
     size?: 'thumb' | 'full'
   } = $props()
 
-  let failed = $state(false)
+  let failedUrl = $state<string | undefined>()
+  const failed = $derived(failedUrl === url)
 </script>
 
 {#if url && !failed}
-  <img class={size} src={url} alt="" loading="lazy" onerror={() => (failed = true)} />
+  <img
+    class={size}
+    src={url}
+    alt=""
+    width={size === 'thumb' ? 40 : 130}
+    height={size === 'thumb' ? 60 : 195}
+    loading={size === 'thumb' ? 'lazy' : 'eager'}
+    decoding="async"
+    onerror={() => (failedUrl = url)}
+  />
 {:else}
   <div class="fallback {source} {size}"></div>
 {/if}

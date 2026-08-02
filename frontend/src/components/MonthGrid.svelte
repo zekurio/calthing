@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { eventDay, monthGrid, sameDay, weekdayLabels, ymd } from '../lib/dates'
+  import { monthGrid, sameDay, weekdayLabels, ymd } from '../lib/dates'
+  import { groupEventsByDay } from '../lib/events.ts'
   import { t } from '../lib/i18n.svelte.ts'
   import type { EventDto } from '../../../shared/api.ts'
   import EventChip from './EventChip.svelte'
@@ -21,19 +22,7 @@
   const MAX_CHIPS = 3
 
   const cells = $derived(monthGrid(viewDate))
-  const byDay = $derived.by(() => {
-    const map = new Map<string, EventDto[]>()
-    for (const e of events) {
-      const key = ymd(eventDay(e))
-      const list = map.get(key)
-      if (list) {
-        list.push(e)
-      } else {
-        map.set(key, [e])
-      }
-    }
-    return map
-  })
+  const byDay = $derived(groupEventsByDay(events))
 
   const today = new Date()
 </script>
