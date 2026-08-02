@@ -7,6 +7,7 @@ export interface JellyfinConfig {
 }
 
 export type HttpFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+export type DeviceId = () => string
 
 export interface JellyfinUser {
   id: string
@@ -19,23 +20,6 @@ interface JellyfinUserDto {
   Id?: string
   Name?: string
   PrimaryImageTag?: string
-}
-
-const AUTH_HEADER =
-  'MediaBrowser Client="calthing", Device="calthing", DeviceId="calthing", Version="1.0"'
-
-/** how long a resolved session-token → user mapping is trusted before re-asking Jellyfin */
-const USER_CACHE_MS = 60_000
-
-function toUser(dto: JellyfinUserDto | undefined, publicUrl: string): JellyfinUser | null {
-  if (!dto?.Id || !dto.Name) return null
-  let avatarUrl = ''
-  if (dto.PrimaryImageTag && publicUrl) {
-    const url = endpoint(publicUrl, `/Users/${encodeURIComponent(dto.Id)}/Images/Primary`)
-    url.searchParams.set('tag', dto.PrimaryImageTag)
-    avatarUrl = url.toString()
-  }
-  return { id: dto.Id, name: dto.Name, avatarUrl }
 }
 
 interface JellyfinItem {
@@ -51,6 +35,9 @@ interface JellyfinItemsResponse {
   TotalRecordCount?: number
 }
 
+const DEFAULT_TIMEOUT_MS = 15_000
+const MAX_ERROR_BODY_BYTES = 512
+
 function endpoint(base: string, path: string): URL {
   const url = new URL(base)
   url.pathname = `${url.pathname.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
@@ -63,76 +50,154 @@ function itemUrl(publicUrl: string, id: string): string {
   return url.toString()
 }
 
+function toUser(dto: JellyfinUserDto | undefined, publicUrl: string): JellyfinUser | null {
+  if (!dto?.Id || !dto.Name) return null
+  let avatarUrl = ''
+  if (dto.PrimaryImageTag && publicUrl) {
+    const url = endpoint(publicUrl, `/Users/${encodeURIComponent(dto.Id)}/Images/Primary`)
+    url.searchParams.set('tag', dto.PrimaryImageTag)
+    avatarUrl = url.toString()
+  }
+  return { id: dto.Id, name: dto.Name, avatarUrl }
+}
+
+function clientAuthorization(deviceId: string): string {
+  return `MediaBrowser Client="calthing", Device="calthing", DeviceId="${deviceId}", Version="1.0"`
+}
+
+function tokenAuthorization(token: string): string {
+  return `MediaBrowser Token="${token}"`
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+async function responseJson<T>(response: Response, context: string): Promise<T> {
+  try {
+    return await response.json() as T
+  } catch (error) {
+    throw new Error(`jellyfin: ${context} returned invalid json: ${errorMessage(error)}`, {
+      cause: error,
+    })
+  }
+}
+
+async function responseError(response: Response, context: string): Promise<Error> {
+  const body = await boundedResponseText(response, MAX_ERROR_BODY_BYTES)
+  return new Error(`jellyfin: ${context} returned ${response.status}: ${body}`)
+}
+
+async function boundedResponseText(response: Response, limit: number): Promise<string> {
+  if (!response.body) return ''
+  const reader = response.body.getReader()
+  const bytes = new Uint8Array(limit)
+  let length = 0
+
+  while (length < limit) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const take = Math.min(value.length, limit - length)
+    bytes.set(value.subarray(0, take), length)
+    length += take
+    if (take < value.length) break
+  }
+  void reader.cancel().catch(() => {})
+  return new TextDecoder().decode(bytes.subarray(0, length))
+}
+
+function discardBody(response: Response): void {
+  void response.body?.cancel().catch(() => {})
+}
+
 export class JellyfinClient {
   readonly #config: JellyfinConfig
   readonly #fetch: HttpFetch
-  readonly #userCache = new Map<string, { user: JellyfinUser; expires: number }>()
+  readonly #deviceId: DeviceId
+  readonly #timeoutMs: number
 
-  constructor(config: JellyfinConfig, fetchFn: HttpFetch = fetch) {
+  constructor(
+    config: JellyfinConfig,
+    fetchFn: HttpFetch = fetch,
+    deviceId: DeviceId = () => crypto.randomUUID(),
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+  ) {
     this.#config = config
     this.#fetch = fetchFn
+    this.#deviceId = deviceId
+    this.#timeoutMs = timeoutMs
   }
 
   /** Logs in via /Users/AuthenticateByName. Returns null on wrong credentials. */
-  async authenticate(
+  authenticate(
     username: string,
     password: string,
   ): Promise<{ token: string; user: JellyfinUser } | null> {
-    const response = await this.#fetch(endpoint(this.#config.url, '/Users/AuthenticateByName'), {
+    const context = '/Users/AuthenticateByName'
+    return this.#request(context, endpoint(this.#config.url, context), {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: AUTH_HEADER,
+        Authorization: clientAuthorization(this.#deviceId()),
       },
       body: JSON.stringify({ Username: username, Pw: password }),
+    }, async (response) => {
+      if (response.status === 401 || response.status === 403) {
+        discardBody(response)
+        return null
+      }
+      if (!response.ok) throw await responseError(response, context)
+
+      const payload = await responseJson<{ AccessToken?: string; User?: JellyfinUserDto }>(
+        response,
+        context,
+      )
+      const user = toUser(payload.User, this.#config.publicUrl)
+      if (!payload.AccessToken || user === null) {
+        throw new Error('jellyfin: /Users/AuthenticateByName response is missing token or user')
+      }
+      return { token: payload.AccessToken, user }
     })
-    if (response.status === 401 || response.status === 403) {
-      await response.body?.cancel()
-      return null
-    }
-    if (!response.ok) {
-      const body = (await response.text()).slice(0, 512)
-      throw new Error(`jellyfin: /Users/AuthenticateByName returned ${response.status}: ${body}`)
-    }
-    const payload = await response.json() as { AccessToken?: string; User?: JellyfinUserDto }
-    const user = toUser(payload.User, this.#config.publicUrl)
-    if (!payload.AccessToken || user === null) {
-      throw new Error('jellyfin: auth response is missing the access token or user')
-    }
-    this.#userCache.set(payload.AccessToken, { user, expires: Date.now() + USER_CACHE_MS })
-    return { token: payload.AccessToken, user }
   }
 
-  /** Resolves a session token to its user; null if the token is no longer valid. */
-  async user(token: string): Promise<JellyfinUser | null> {
-    const hit = this.#userCache.get(token)
-    if (hit && hit.expires > Date.now()) return hit.user
-    const response = await this.#fetch(endpoint(this.#config.url, '/Users/Me'), {
-      headers: { Accept: 'application/json', 'X-Emby-Token': token },
+  /** Resolves a session token to its user; null only when Jellyfin rejects the token. */
+  user(token: string): Promise<JellyfinUser | null> {
+    const context = '/Users/Me'
+    return this.#request(context, endpoint(this.#config.url, context), {
+      headers: {
+        Accept: 'application/json',
+        Authorization: tokenAuthorization(token),
+      },
+    }, async (response) => {
+      if (response.status === 401 || response.status === 403) {
+        discardBody(response)
+        return null
+      }
+      if (!response.ok) throw await responseError(response, context)
+
+      const user = toUser(
+        await responseJson<JellyfinUserDto>(response, context),
+        this.#config.publicUrl,
+      )
+      if (user === null) throw new Error('jellyfin: /Users/Me response is missing user')
+      return user
     })
-    if (!response.ok) {
-      await response.body?.cancel()
-      this.#userCache.delete(token)
-      return null
-    }
-    const user = toUser(await response.json() as JellyfinUserDto, this.#config.publicUrl)
-    if (user === null) return null
-    this.#userCache.set(token, { user, expires: Date.now() + USER_CACHE_MS })
-    return user
   }
 
-  /** Invalidates the session on the Jellyfin side (best effort). */
+  /** Invalidates the session on the Jellyfin side (bounded best effort). */
   async logout(token: string): Promise<void> {
-    this.#userCache.delete(token)
+    const context = '/Sessions/Logout'
     try {
-      const response = await this.#fetch(endpoint(this.#config.url, '/Sessions/Logout'), {
+      await this.#request(context, endpoint(this.#config.url, context), {
         method: 'POST',
-        headers: { 'X-Emby-Token': token },
+        headers: { Authorization: tokenAuthorization(token) },
+      }, (response) => {
+        discardBody(response)
+        return Promise.resolve()
       })
-      await response.body?.cancel()
     } catch {
-      // Jellyfin unreachable — the cookie is cleared either way
+      // The HTTP layer clears the cookie regardless of Jellyfin availability.
     }
   }
 
@@ -150,25 +215,28 @@ export class JellyfinClient {
     const pageSize = 1000
     let startIndex = 0
     while (byProvider.size < wanted.size) {
-      const url = endpoint(this.#config.url, '/Items')
+      const context = '/Items'
+      const url = endpoint(this.#config.url, context)
       url.searchParams.set('IncludeItemTypes', 'Episode,Movie')
       url.searchParams.set('Recursive', 'true')
       url.searchParams.set('Fields', 'ProviderIds,Overview')
       url.searchParams.set('StartIndex', String(startIndex))
       url.searchParams.set('Limit', String(pageSize))
 
-      const response = await this.#fetch(url, {
+      const payload = await this.#request(context, url, {
         headers: {
           Accept: 'application/json',
-          'X-Emby-Token': this.#config.apiKey,
+          Authorization: tokenAuthorization(this.#config.apiKey),
         },
+      }, async (response) => {
+        if (!response.ok) throw await responseError(response, context)
+        const decoded = await responseJson<JellyfinItemsResponse>(response, context)
+        if (decoded.Items !== undefined && !Array.isArray(decoded.Items)) {
+          throw new Error('jellyfin: /Items response has invalid items')
+        }
+        return decoded
       })
-      if (!response.ok) {
-        const body = (await response.text()).slice(0, 512)
-        throw new Error(`jellyfin: /Items returned ${response.status}: ${body}`)
-      }
 
-      const payload = await response.json() as JellyfinItemsResponse
       const items = payload.Items ?? []
       for (const item of items) {
         for (const provider of ['Tvdb', 'Tmdb'] as const) {
@@ -191,6 +259,39 @@ export class JellyfinClient {
         event.title = item.Name
       }
       if (item.Overview) event.overview = item.Overview
+    }
+  }
+
+  async #request<T>(
+    context: string,
+    input: URL,
+    init: RequestInit,
+    consume: (response: Response) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController()
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort()
+        reject(new Error(`jellyfin: ${context} timed out after ${this.#timeoutMs}ms`))
+      }, this.#timeoutMs)
+    })
+    const request = (async () => {
+      let response: Response
+      try {
+        response = await this.#fetch(input, { ...init, signal: controller.signal })
+      } catch (error) {
+        throw new Error(`jellyfin: ${context} request failed: ${errorMessage(error)}`, {
+          cause: error,
+        })
+      }
+      return await consume(response)
+    })()
+
+    try {
+      return await Promise.race([request, timeout])
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 }
