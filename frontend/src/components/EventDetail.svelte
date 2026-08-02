@@ -1,5 +1,6 @@
 <script lang="ts">
   import { dayLabel, eventDay, formatTime, sxxeyy } from '../lib/dates'
+  import { eventColor } from '../lib/eventPresentation.ts'
   import type { EventDto } from '../../../shared/api.ts'
   import { kindLabel, t } from '../lib/i18n.svelte.ts'
   import Poster from './Poster.svelte'
@@ -7,7 +8,7 @@
   let { event, color }: { event: EventDto; color?: string } = $props()
 </script>
 
-<article class={event.source}>
+<article>
   <Poster url={event.posterUrl} source={event.source} size="full" />
 
 
@@ -22,7 +23,9 @@
     {/if}
 
     <div class="badges">
-      <span class="badge instance" style:--instance-color={color}>{event.instance}</span>
+      <span class="badge instance" style:--instance-color={eventColor(event, color)}>
+        {event.instance}
+      </span>
       <span class="badge">{kindLabel(event.kind)}</span>
       {#if event.downloaded}
         <span class="badge ok">✓ {t('available')}</span>
@@ -85,16 +88,6 @@
     border-radius: 999px;
     border: 1px solid var(--line);
     color: var(--muted);
-  }
-
-  .badge.sonarr {
-    color: var(--sonarr);
-    border-color: color-mix(in srgb, var(--sonarr) 40%, transparent);
-  }
-
-  .badge.radarr {
-    color: var(--radarr);
-    border-color: color-mix(in srgb, var(--radarr) 40%, transparent);
   }
 
   .badge.instance {

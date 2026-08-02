@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { dayLabel, eventDay, formatTime, sxxeyy, ymd } from '../lib/dates'
+  import { dayLabel, formatTime, sxxeyy, ymd } from '../lib/dates'
+  import { eventAriaLabel, eventColor } from '../lib/eventPresentation.ts'
+  import { groupEventsByDay } from '../lib/events.ts'
   import type { EventDto } from '../../../shared/api.ts'
   import { kindLabel, t } from '../lib/i18n.svelte.ts'
   import Poster from './Poster.svelte'
@@ -14,20 +16,11 @@
     instanceColors: Record<string, string>
   } = $props()
 
-  const groups = $derived.by(() => {
-    const map = new Map<string, { date: Date; events: EventDto[] }>()
-    for (const e of events) {
-      const day = eventDay(e)
-      const key = ymd(day)
-      const group = map.get(key)
-      if (group) {
-        group.events.push(e)
-      } else {
-        map.set(key, { date: day, events: [e] })
-      }
-    }
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, g]) => g)
-  })
+  const groups = $derived.by(() =>
+    [...groupEventsByDay(events).entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, events]) => ({ date: new Date(`${key}T00:00:00`), events })),
+  )
 </script>
 
 {#if groups.length === 0}
@@ -44,7 +37,13 @@
       {#each group.events as e (e.uid)}
         <button
           class="row"
-          style:--instance-color={instanceColors[e.instance] ?? (e.source === 'radarr' ? 'var(--radarr)' : 'var(--sonarr)')}
+          aria-label={eventAriaLabel(
+            e,
+            e.kind === 'episode' ? sxxeyy(e.season, e.episode) : kindLabel(e.kind),
+            e.downloaded ? t('available') : t('pending'),
+            e.kind === 'episode' ? formatTime(e.start) : undefined,
+          )}
+          style:--instance-color={eventColor(e, instanceColors[e.instance])}
           onclick={() => onselect(e)}
         >
           <Poster url={e.posterUrl} source={e.source} />

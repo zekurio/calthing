@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { addDays, eventDay, sameDay, startOfWeek, weekdayLabels, ymd } from '../lib/dates'
+  import { addDays, sameDay, startOfWeek, weekdayLabels, ymd } from '../lib/dates'
+  import { groupEventsByDay } from '../lib/events.ts'
   import { t } from '../lib/i18n.svelte.ts'
   import type { EventDto } from '../../../shared/api.ts'
   import EventChip from './EventChip.svelte'
@@ -20,19 +21,8 @@
     const start = startOfWeek(viewDate)
     return Array.from({ length: 7 }, (_, i) => addDays(start, i))
   })
-  const byDay = $derived.by(() => {
-    const map = new Map<string, EventDto[]>()
-    for (const e of events) {
-      const key = ymd(eventDay(e))
-      const list = map.get(key)
-      if (list) {
-        list.push(e)
-      } else {
-        map.set(key, [e])
-      }
-    }
-    return map
-  })
+  const byDay = $derived(groupEventsByDay(events))
+  const labels = $derived(weekdayLabels())
 
   const today = new Date()
 </script>
@@ -43,7 +33,7 @@
     {@const isToday = sameDay(day, today)}
     <section class="day" class:today={isToday} class:empty={dayList.length === 0} role="gridcell">
       <header>
-        <span class="wd">{weekdayLabels()[i]}</span>
+        <span class="wd">{labels[i]}</span>
         <span class="num">
           {#if isToday}<span class="dot" aria-label={t('today')}></span>{/if}
           {day.getDate()}

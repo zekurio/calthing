@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatTime, sxxeyy } from '../lib/dates'
-  import { t } from '../lib/i18n.svelte.ts'
+  import { eventAriaLabel, eventColor, movieReleaseCode } from '../lib/eventPresentation.ts'
+  import { kindLabel, t } from '../lib/i18n.svelte.ts'
   import type { EventDto } from '../../../shared/api.ts'
 
   let {
@@ -15,21 +16,23 @@
     onselect: () => void
   } = $props()
 
-  const RELEASE_CODES: Record<string, string> = {
-    'movie-cinema': 'CIN',
-    'movie-digital': 'DIG',
-    'movie-physical': 'PHY',
-  }
-
-  const code = $derived(
-    event.kind === 'episode' ? formatTime(event.start) : RELEASE_CODES[event.kind],
+  const detail = $derived(
+    event.kind === 'episode'
+      ? `${sxxeyy(event.season, event.episode)}${event.subtitle ? ` · ${event.subtitle}` : ''}`
+      : kindLabel(event.kind),
+  )
+  const time = $derived(event.kind === 'episode' ? formatTime(event.start) : undefined)
+  const code = $derived(event.kind === 'episode' ? time : movieReleaseCode(event.kind))
+  const ariaLabel = $derived(
+    eventAriaLabel(event, detail, event.downloaded ? t('available') : t('pending'), time),
   )
 </script>
 
 <button
   class="chip"
   class:compact
-  style:--instance-color={color ?? (event.source === 'radarr' ? 'var(--radarr)' : 'var(--sonarr)')}
+  aria-label={ariaLabel}
+  style:--instance-color={eventColor(event, color)}
   onclick={onselect}
   title={event.title}
 >
