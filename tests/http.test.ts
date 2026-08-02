@@ -254,6 +254,9 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
   const cookie = login.headers.get('set-cookie') ?? ''
   assertStringIncludes(cookie, 'calthing_session=jf-token')
   assertStringIncludes(cookie, 'HttpOnly')
+  assertStringIncludes(cookie, 'Secure')
+  assertEquals(login.headers.get('cache-control'), 'private, no-store')
+  assertEquals(login.headers.get('vary'), 'Cookie')
   const body = await login.json()
   assertEquals(body.name, 'alice')
   assertEquals(body.avatarUrl, 'https://jf.example/Users/user-1/Images/Primary?tag=t1')
@@ -261,14 +264,21 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
 
   const anonymous = await request(app, '/api/events')
   assertEquals(anonymous.status, 401)
+  assertEquals(anonymous.headers.get('cache-control'), 'private, no-store')
+  assertEquals(anonymous.headers.get('vary'), 'Cookie')
+  assertEquals(anonymous.headers.get('x-content-type-options'), 'nosniff')
   const anonymousMe = await request(app, '/api/me')
   assertEquals(anonymousMe.status, 401)
 
   const sessionHeaders = { cookie: 'calthing_session=jf-token' }
   const events = await request(app, '/api/events', { headers: sessionHeaders })
   assertEquals(events.status, 200)
+  assertEquals(events.headers.get('cache-control'), 'private, no-store')
+  assertEquals(events.headers.get('vary'), 'Cookie')
   const me = await request(app, '/api/me', { headers: sessionHeaders })
   assertEquals(me.status, 200)
+  assertEquals(me.headers.get('cache-control'), 'private, no-store')
+  assertEquals(me.headers.get('vary'), 'Cookie')
   assertEquals(await me.json(), body)
 
   const staleSession = await request(app, '/api/events', {
@@ -278,7 +288,12 @@ Deno.test('login sets a session cookie, guards the API, and mints per-user feed 
 
   const logout = await request(app, '/api/logout', { method: 'POST', headers: sessionHeaders })
   assertEquals(logout.status, 200)
-  assertStringIncludes(logout.headers.get('set-cookie') ?? '', 'Max-Age=0')
+  const clearedCookie = logout.headers.get('set-cookie') ?? ''
+  assertStringIncludes(clearedCookie, 'calthing_session=')
+  assertStringIncludes(clearedCookie, 'Max-Age=0')
+  assertStringIncludes(clearedCookie, 'Secure')
+  assertEquals(logout.headers.get('cache-control'), 'private, no-store')
+  assertEquals(logout.headers.get('vary'), 'Cookie')
 })
 
 Deno.test('auth disabled keeps the API and feed public and /api/me anonymous', async () => {
@@ -305,7 +320,7 @@ Deno.test('auth disabled keeps the API and feed public and /api/me anonymous', a
   assertEquals(login.status, 404)
 })
 
-Deno.test('login answers 502 when Jellyfin is unreachable', async () => {
+Deno.test('Jellyfin outages return 502 for login but 503 for session validation', async () => {
   const app = createApp({
     config: copyConfig('feed-secret'),
     auth: {
@@ -333,11 +348,61 @@ Deno.test('login answers 502 when Jellyfin is unreachable', async () => {
   assertEquals(login.status, 502)
   assertEquals(await login.text(), 'jellyfin unreachable\n')
 
-  // an unreachable Jellyfin means sessions cannot be verified — fail closed
-  const events = await request(app, '/api/events', {
+  // An outage is not proof that a revalidated token is invalid.
+  for (const path of ['/api/events', '/api/me']) {
+    const response = await request(app, path, {
+      headers: { cookie: 'calthing_session=jf-token' },
+    })
+    assertEquals(response.status, 503, path)
+    assertEquals(await response.text(), 'session validation unavailable\n', path)
+    assertEquals(response.headers.get('content-type'), 'text/plain; charset=utf-8', path)
+    assertEquals(response.headers.get('x-content-type-options'), 'nosniff', path)
+    assertEquals(response.headers.get('cache-control'), 'private, no-store', path)
+    assertEquals(response.headers.get('vary'), 'Cookie', path)
+  }
+})
+
+Deno.test('logout clears the cookie without waiting for upstream revocation', async () => {
+  let releaseLogout: (() => void) | undefined
+  let logoutStarted = false
+  const auth: AuthClient = {
+    ...stubAuth,
+    logout() {
+      logoutStarted = true
+      return new Promise<void>((resolve) => {
+        releaseLogout = resolve
+      })
+    },
+  }
+  const app = createApp({
+    config: copyConfig('feed-secret'),
+    auth,
+    logger: { info() {} },
+    fetcher: {
+      async fetch() {
+        return { events: [], instances: [] }
+      },
+    },
+  })
+
+  const pendingResponse = request(app, '/api/logout', {
+    method: 'POST',
     headers: { cookie: 'calthing_session=jf-token' },
   })
-  assertEquals(events.status, 401)
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const outcome = await Promise.race([
+    pendingResponse,
+    new Promise<'timeout'>((resolve) => {
+      timeoutId = setTimeout(() => resolve('timeout'), 50)
+    }),
+  ])
+  clearTimeout(timeoutId)
+  releaseLogout?.()
+
+  assertEquals(logoutStarted, true)
+  assert(outcome instanceof Response)
+  assertEquals(outcome.status, 200)
+  assertStringIncludes(outcome.headers.get('set-cookie') ?? '', 'Max-Age=0')
 })
 
 Deno.test('health is static and does not fetch upstream instances', async () => {

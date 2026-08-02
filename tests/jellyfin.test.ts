@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from '@std/assert'
+import { assertEquals, assertRejects, assertStringIncludes } from '@std/assert'
 
 import type { CalendarEvent } from '../src/domain/event.ts'
 import { JellyfinClient } from '../src/upstream/jellyfin.ts'
@@ -23,17 +23,19 @@ function episode(tvdbId: string): CalendarEvent {
   }
 }
 
-Deno.test('Jellyfin matches TVDB episode IDs and emits only the public item URL', async () => {
+const config = {
+  url: 'http://jellyfin.internal:8096/base',
+  publicUrl: 'https://watch.example/jellyfin',
+  apiKey: 'secret',
+}
+
+Deno.test('Jellyfin matches TVDB episode IDs using standard API-key authorization', async () => {
   const events = [episode('123'), episode('456')]
   let requested: URL | undefined
-  let token = ''
-  const client = new JellyfinClient({
-    url: 'http://jellyfin.internal:8096/base',
-    publicUrl: 'https://watch.example/jellyfin',
-    apiKey: 'secret',
-  }, (input, init) => {
+  let authorization = ''
+  const client = new JellyfinClient(config, (input, init) => {
     requested = new URL(input.toString())
-    token = new Headers(init?.headers).get('X-Emby-Token') ?? ''
+    authorization = new Headers(init?.headers).get('Authorization') ?? ''
     return Promise.resolve(Response.json({
       TotalRecordCount: 1,
       Items: [{
@@ -48,7 +50,7 @@ Deno.test('Jellyfin matches TVDB episode IDs and emits only the public item URL'
 
   await client.addLinks(events)
 
-  assertEquals(token, 'secret')
+  assertEquals(authorization, 'MediaBrowser Token="secret"')
   assertEquals(requested?.pathname, '/base/Items')
   assertEquals(requested?.searchParams.get('IncludeItemTypes'), 'Episode,Movie')
   assertEquals(requested?.searchParams.get('Limit'), '1000')
@@ -61,30 +63,27 @@ Deno.test('Jellyfin matches TVDB episode IDs and emits only the public item URL'
 })
 
 Deno.test('Jellyfin errors include bounded upstream context', async () => {
-  const client = new JellyfinClient({
-    url: 'http://jellyfin.internal:8096',
-    publicUrl: 'https://watch.example',
-    apiKey: 'secret',
-  }, () => Promise.resolve(new Response('denied', { status: 401 })))
+  const marker = 'must-not-leak'
+  const client = new JellyfinClient(
+    config,
+    () => Promise.resolve(new Response(`${'x'.repeat(600)}${marker}`, { status: 500 })),
+  )
 
-  let message = ''
-  try {
-    await client.addLinks([episode('123')])
-  } catch (error) {
-    message = error instanceof Error ? error.message : String(error)
-  }
-  assertStringIncludes(message, 'jellyfin: /Items returned 401: denied')
+  const error = await assertRejects(() => client.addLinks([episode('123')]), Error)
+  assertStringIncludes(error.message, 'jellyfin: /Items returned 500:')
+  assertEquals(error.message.includes(marker), false)
+  assertEquals(error.message.length <= 550, true)
 })
 
-Deno.test('Jellyfin login identifies as calthing, caches the user, and expires with the session', async () => {
-  const requests: Array<{ url: URL; init?: RequestInit }> = []
-  const client = new JellyfinClient({
-    url: 'http://jellyfin.internal:8096/base',
-    publicUrl: 'https://watch.example',
-    apiKey: '',
-  }, (input, init) => {
+Deno.test('Jellyfin login uses a unique device ID and validates every request', async () => {
+  const requests: Array<{ url: URL; authorization: string }> = []
+  const deviceIds = ['login-device-one', 'login-device-two']
+  let nextDeviceId = 0
+  const client = new JellyfinClient(config, (input, init) => {
     const url = new URL(input.toString())
-    requests.push({ url, init })
+    const authorization = new Headers(init?.headers).get('Authorization') ?? ''
+    requests.push({ url, authorization })
+
     if (url.pathname === '/base/Users/AuthenticateByName') {
       const { Pw } = JSON.parse(String(init?.body)) as { Pw: string }
       if (Pw !== 'right') return Promise.resolve(new Response('denied', { status: 401 }))
@@ -94,8 +93,9 @@ Deno.test('Jellyfin login identifies as calthing, caches the user, and expires w
       }))
     }
     if (url.pathname === '/base/Users/Me') {
-      const token = new Headers(init?.headers).get('X-Emby-Token')
-      if (token !== 'jf-token') return Promise.resolve(new Response('denied', { status: 401 }))
+      if (authorization !== 'MediaBrowser Token="jf-token"') {
+        return Promise.resolve(new Response('denied', { status: 401 }))
+      }
       return Promise.resolve(
         Response.json({ Id: 'user-1', Name: 'alice', PrimaryImageTag: 'tag123' }),
       )
@@ -104,27 +104,78 @@ Deno.test('Jellyfin login identifies as calthing, caches the user, and expires w
       return Promise.resolve(new Response(null, { status: 204 }))
     }
     return Promise.resolve(new Response('unexpected', { status: 500 }))
-  })
+  }, () => deviceIds[nextDeviceId++] ?? 'unexpected-device')
 
-  const avatarUrl = 'https://watch.example/Users/user-1/Images/Primary?tag=tag123'
+  const avatarUrl = 'https://watch.example/jellyfin/Users/user-1/Images/Primary?tag=tag123'
   assertEquals(await client.authenticate('alice', 'wrong'), null)
   const session = await client.authenticate('alice', 'right')
   assertEquals(session, { token: 'jf-token', user: { id: 'user-1', name: 'alice', avatarUrl } })
-  const authHeader = new Headers(requests[1]?.init?.headers).get('Authorization') ?? ''
-  assertStringIncludes(authHeader, 'MediaBrowser Client="calthing"')
+  assertEquals(
+    requests[0]?.authorization,
+    'MediaBrowser Client="calthing", Device="calthing", DeviceId="login-device-one", Version="1.0"',
+  )
+  assertEquals(
+    requests[1]?.authorization,
+    'MediaBrowser Client="calthing", Device="calthing", DeviceId="login-device-two", Version="1.0"',
+  )
 
-  // a fresh login primes the cache — resolving the session hits no endpoint
   assertEquals(await client.user('jf-token'), { id: 'user-1', name: 'alice', avatarUrl })
-  assertEquals(requests.length, 2)
-
-  // unknown tokens are checked against Jellyfin and rejected
-  assertEquals(await client.user('revoked'), null)
+  assertEquals(await client.user('jf-token'), { id: 'user-1', name: 'alice', avatarUrl })
   assertEquals(requests[2]?.url.pathname, '/base/Users/Me')
+  assertEquals(requests[3]?.url.pathname, '/base/Users/Me')
+  assertEquals(requests[2]?.authorization, 'MediaBrowser Token="jf-token"')
+  assertEquals(requests[3]?.authorization, 'MediaBrowser Token="jf-token"')
 
   await client.logout('jf-token')
-  assertEquals(requests[3]?.url.pathname, '/base/Sessions/Logout')
+  assertEquals(requests[4]?.url.pathname, '/base/Sessions/Logout')
+  assertEquals(requests[4]?.authorization, 'MediaBrowser Token="jf-token"')
+})
 
-  // logout drops the cache entry, so the next lookup asks Jellyfin again
-  assertEquals(await client.user('jf-token'), { id: 'user-1', name: 'alice', avatarUrl })
-  assertEquals(requests[4]?.url.pathname, '/base/Users/Me')
+Deno.test('Jellyfin distinguishes rejected tokens from validation outages', async () => {
+  const rejected = new JellyfinClient(
+    config,
+    () => Promise.resolve(new Response('denied', { status: 403 })),
+  )
+  assertEquals(await rejected.user('revoked'), null)
+
+  const unavailable = new JellyfinClient(
+    config,
+    () => Promise.resolve(new Response('maintenance', { status: 503 })),
+  )
+  await assertRejects(
+    () => unavailable.user('jf-token'),
+    Error,
+    'jellyfin: /Users/Me returned 503: maintenance',
+  )
+
+  const malformed = new JellyfinClient(config, () =>
+    Promise.resolve(
+      new Response('{', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ))
+  await assertRejects(() => malformed.user('jf-token'), Error, 'returned invalid json')
+
+  const offline = new JellyfinClient(config, () => Promise.reject(new Error('connection reset')))
+  await assertRejects(
+    () => offline.user('jf-token'),
+    Error,
+    'jellyfin: /Users/Me request failed: connection reset',
+  )
+})
+
+Deno.test('Jellyfin validation is bounded by the injected timeout', async () => {
+  const client = new JellyfinClient(
+    config,
+    () => new Promise<Response>(() => {}),
+    () => 'device-id',
+    5,
+  )
+
+  await assertRejects(
+    () => client.user('jf-token'),
+    Error,
+    'jellyfin: /Users/Me timed out after 5ms',
+  )
 })

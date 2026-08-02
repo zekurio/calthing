@@ -3,6 +3,7 @@
   import type { EventDto, MeDto } from '../../shared/api.ts'
   import { ApiError, fetchEvents, fetchMe, logout } from './lib/api'
   import Gate from './components/Gate.svelte'
+  import SessionStatus from './components/SessionStatus.svelte'
   import { addDays, dayLabel, eventDay, monthGrid, sameDay, startOfWeek, ymd } from './lib/dates'
   import Header from './components/Header.svelte'
   import MonthGrid from './components/MonthGrid.svelte'
@@ -25,7 +26,7 @@
   }
   let view = $state<View>(initialView())
   let viewDate = $state(new Date())
-  let session = $state<'loading' | 'gate' | 'ready'>('loading')
+  let session = $state<'bootstrap' | 'gate' | 'ready'>('bootstrap')
   let me = $state<MeDto | null>(null)
   const queryClient = useQueryClient()
   let hidden = $state(
@@ -62,6 +63,12 @@
     }
   })
 
+  const meQuery = createQuery(() => ({
+    queryKey: ['me'] as const,
+    queryFn: ({ signal }) => fetchMe(signal),
+    enabled: session === 'bootstrap',
+  }))
+
   const eventsQuery = createQuery(() => ({
     queryKey: ['events', range.start, range.end] as const,
     queryFn: ({ queryKey: [, start, end], signal }) => fetchEvents(start, end, signal),
@@ -69,36 +76,62 @@
     enabled: session === 'ready',
   }))
 
-  fetchMe().then(
-    (resolved) => {
-      me = resolved
-      session = 'ready'
-    },
-    (error: unknown) => {
-      me = null
-      session = error instanceof ApiError && error.status === 401 ? 'gate' : 'ready'
-    },
-  )
-
-  // an expired or revoked session surfaces as a 401 from the events endpoint
-  $effect(() => {
-    const error = eventsQuery.error
-    if (error instanceof ApiError && error.status === 401) {
-      me = null
-      session = 'gate'
-    }
-  })
-
-  function unlock(resolved: MeDto) {
-    me = resolved
-    session = 'ready'
-    queryClient.invalidateQueries({ queryKey: ['events'] })
+  function clearProtectedEvents() {
+    modal = null
+    void queryClient.cancelQueries({ queryKey: ['events'] })
+    queryClient.removeQueries({ queryKey: ['events'] })
   }
 
-  async function signOut() {
-    await logout()
-    me = null
+  function requireLogin() {
     session = 'gate'
+    me = null
+    clearProtectedEvents()
+    void queryClient.cancelQueries({ queryKey: ['me'] })
+    queryClient.removeQueries({ queryKey: ['me'] })
+  }
+
+  $effect(() => {
+    if (session !== 'bootstrap') return
+    if (meQuery.isSuccess) {
+      me = meQuery.data
+      session = 'ready'
+      return
+    }
+    if (meQuery.error instanceof ApiError && meQuery.error.status === 401) requireLogin()
+  })
+
+  // An expired or revoked session surfaces as a 401 from the protected events endpoint.
+  $effect(() => {
+    if (eventsQuery.error instanceof ApiError && eventsQuery.error.status === 401) requireLogin()
+  })
+
+  function retrySession() {
+    void meQuery.refetch()
+  }
+
+  function unlock(resolved: MeDto) {
+    clearProtectedEvents()
+    queryClient.setQueryData(['me'], resolved)
+    me = resolved
+    session = 'ready'
+  }
+
+  let actionError = $state('')
+
+  async function signOut() {
+    actionError = ''
+    try {
+      await logout()
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        requireLogin()
+        return
+      }
+      dismissedError = ''
+      actionError = t('signOutFailed')
+      return
+    }
+    requireLogin()
   }
 
   const events = $derived(eventsQuery.data?.events ?? [])
@@ -106,7 +139,7 @@
   const branding = $derived(eventsQuery.data?.branding ?? DEFAULT_BRANDING)
   const instanceColors = $derived(buildInstanceColors(instances))
   const loading = $derived(eventsQuery.isFetching)
-  const error = $derived(eventsQuery.error?.message ?? '')
+  const error = $derived(actionError || eventsQuery.error?.message || '')
   const visible = $derived(events.filter((e) => !hidden.has(e.instance)))
   const failed = $derived(instances.filter((i) => !i.ok))
   const failedNotice = $derived(
@@ -138,7 +171,9 @@
   }
 </script>
 
-{#if session === 'gate'}
+{#if session === 'bootstrap'}
+  <SessionStatus error={meQuery.isError && !meQuery.isFetching} onretry={retrySession} />
+{:else if session === 'gate'}
   <Gate onunlock={unlock} />
 {:else if session === 'ready'}
   <Header

@@ -62,6 +62,10 @@ const messages = {
     unreachableOne: '{names} ist nicht erreichbar — angezeigt werden die verfügbaren Quellen.',
     unreachableMany: '{names} sind nicht erreichbar — angezeigt werden die verfügbaren Quellen.',
     loadFailed: 'Termine konnten nicht geladen werden ({status})',
+    networkFailed: 'Die Verbindung zum Kalender ist fehlgeschlagen.',
+    sessionLoading: 'Sitzung wird geprüft…',
+    sessionUnavailable: 'Die Sitzung kann gerade nicht geprüft werden.',
+    retry: 'Erneut versuchen',
     signInHint: 'Melde dich mit deinem Jellyfin-Konto an.',
     username: 'Benutzername',
     password: 'Passwort',
@@ -72,6 +76,7 @@ const messages = {
     signInFailed: 'Etwas ist schiefgelaufen.',
     account: 'Konto',
     signOut: 'Abmelden',
+    signOutFailed: 'Abmelden ist fehlgeschlagen — bitte erneut versuchen.',
   },
   en: {
     programme: 'Schedule',
@@ -111,6 +116,10 @@ const messages = {
     unreachableOne: '{names} is unreachable — showing the available sources.',
     unreachableMany: '{names} are unreachable — showing the available sources.',
     loadFailed: 'Loading events failed ({status})',
+    networkFailed: 'Connecting to the calendar failed.',
+    sessionLoading: 'Checking your session…',
+    sessionUnavailable: 'Your session cannot be checked right now.',
+    retry: 'Try again',
     signInHint: 'Sign in with your Jellyfin account.',
     username: 'Username',
     password: 'Password',
@@ -121,6 +130,7 @@ const messages = {
     signInFailed: 'Something went wrong.',
     account: 'Account',
     signOut: 'Sign out',
+    signOutFailed: 'Signing out failed — please try again.',
   },
 } as const satisfies Record<Locale, Record<string, string>>
 

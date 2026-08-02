@@ -184,6 +184,11 @@ const errorHeaders = {
   'x-content-type-options': 'nosniff',
 }
 
+const privateSessionHeaders = {
+  'cache-control': 'private, no-store',
+  vary: 'Cookie',
+}
+
 export function createApp(dependencies: AppDependencies) {
   const { config, fetcher, auth } = dependencies
   const now = dependencies.now ?? (() => new Date())
@@ -193,18 +198,14 @@ export function createApp(dependencies: AppDependencies) {
   const authEnabled = auth !== undefined
 
   const sessionCookie = (token: string, maxAge: number = SESSION_MAX_AGE) =>
-    `${SESSION_COOKIE}=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}`
+    `${SESSION_COOKIE}=${token}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=${maxAge}`
 
-  /** Resolves the session cookie to a Jellyfin user (null = not logged in). */
+  /** Resolves the session cookie; upstream failures propagate so callers can answer 503. */
   const currentUser = async (cookieHeader: string | undefined): Promise<AuthUser | null> => {
     if (!auth) return null
     const token = parseCookies(cookieHeader)[SESSION_COOKIE]
     if (!token) return null
-    try {
-      return await auth.user(token)
-    } catch {
-      return null // Jellyfin unreachable — treat as logged out
-    }
+    return await auth.user(token)
   }
 
   const methodNotAllowed = (allow: string) => () =>
@@ -230,9 +231,17 @@ export function createApp(dependencies: AppDependencies) {
       })
     })
     .get('/api/events', async ({ query, headers, set, status }) => {
-      if (authEnabled && await currentUser(headers.cookie) === null) {
-        Object.assign(set.headers, errorHeaders)
-        return status(401, 'unauthorized\n')
+      if (authEnabled) {
+        Object.assign(set.headers, privateSessionHeaders)
+        try {
+          if (await currentUser(headers.cookie) === null) {
+            Object.assign(set.headers, errorHeaders)
+            return status(401, 'unauthorized\n')
+          }
+        } catch {
+          Object.assign(set.headers, errorHeaders)
+          return status(503, 'session validation unavailable\n')
+        }
       }
       const window = resolveWindow(query, config, now())
       if (typeof window === 'string') {
@@ -252,9 +261,11 @@ export function createApp(dependencies: AppDependencies) {
         200: eventsResponseSchema,
         400: t.String(),
         401: t.String(),
+        503: t.String(),
       },
     })
     .post('/api/auth', async ({ body, set, status }) => {
+      Object.assign(set.headers, privateSessionHeaders)
       if (!authEnabled || !auth) {
         Object.assign(set.headers, errorHeaders)
         return status(404, 'auth disabled\n')
@@ -286,19 +297,35 @@ export function createApp(dependencies: AppDependencies) {
         502: t.String(),
       },
     })
-    .post('/api/logout', async ({ headers, set }) => {
-      const token = parseCookies(headers.cookie)[SESSION_COOKIE]
-      if (token && auth) await auth.logout(token)
+    .post('/api/logout', ({ headers, set }) => {
+      Object.assign(set.headers, privateSessionHeaders)
       set.headers['set-cookie'] = sessionCookie('', 0)
       set.headers['content-type'] = 'application/json; charset=utf-8'
+
+      const token = parseCookies(headers.cookie)[SESSION_COOKIE]
+      if (token && auth) {
+        try {
+          void auth.logout(token).catch(() => {})
+        } catch {
+          // A collaborator may throw before returning its best-effort promise.
+        }
+      }
       return { ok: true as const }
     }, {
       response: { 200: t.Object({ ok: t.Literal(true) }) },
     })
     .get('/api/me', async ({ headers, set, status }) => {
+      Object.assign(set.headers, privateSessionHeaders)
       set.headers['content-type'] = 'application/json; charset=utf-8'
       if (!authEnabled) return { name: '', feedToken: '', avatarUrl: '' }
-      const user = await currentUser(headers.cookie)
+
+      let user: AuthUser | null
+      try {
+        user = await currentUser(headers.cookie)
+      } catch {
+        Object.assign(set.headers, errorHeaders)
+        return status(503, 'session validation unavailable\n')
+      }
       if (user === null) {
         Object.assign(set.headers, errorHeaders)
         return status(401, 'unauthorized\n')
@@ -312,6 +339,7 @@ export function createApp(dependencies: AppDependencies) {
       response: {
         200: meResponseSchema,
         401: t.String(),
+        503: t.String(),
       },
     })
     .get('/api/health', ({ set }) => {
