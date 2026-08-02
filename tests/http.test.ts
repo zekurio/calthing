@@ -424,7 +424,7 @@ Deno.test('health is static and does not fetch upstream instances', async () => 
   assertEquals(calls, 0)
 })
 
-Deno.test('static handler serves files, SPA fallback, HEAD, and rejects traversal', async () => {
+Deno.test('static handler serves files, falls back only for SPA paths, and rejects traversal', async () => {
   const app = createApp({
     config: copyConfig(),
     staticDir: 'frontend',
@@ -438,15 +438,23 @@ Deno.test('static handler serves files, SPA fallback, HEAD, and rejects traversa
 
   const index = await request(app, '/')
   assertEquals(index.status, 200)
+  assertEquals(index.headers.get('cache-control'), 'no-cache')
   assertStringIncludes(await index.text(), '<!doctype html>')
 
-  const asset = await request(app, '/vite.config.ts')
-  assertEquals(asset.status, 200)
-  assertStringIncludes(await asset.text(), 'defineConfig')
+  const file = await request(app, '/vite.config.ts')
+  assertEquals(file.status, 200)
+  assertEquals(file.headers.get('cache-control'), 'no-cache')
+  assertEquals(file.headers.get('content-length'), null)
+  assertStringIncludes(await file.text(), 'defineConfig')
 
   const fallback = await request(app, '/some/client/route')
   assertEquals(fallback.status, 200)
+  assertEquals(fallback.headers.get('cache-control'), 'no-cache')
   assertStringIncludes(await fallback.text(), '<!doctype html>')
+
+  const missingAsset = await request(app, '/some/client/route.js')
+  assertEquals(missingAsset.status, 404)
+  assertEquals(await missingAsset.text(), 'Not Found\n')
 
   const head = await request(app, '/vite.config.ts', { method: 'HEAD' })
   assertEquals(head.status, 200)
@@ -455,6 +463,56 @@ Deno.test('static handler serves files, SPA fallback, HEAD, and rejects traversa
 
   const traversal = await request(app, '/%2e%2e%2fconfig.example.yaml')
   assertEquals(traversal.status, 404)
+})
+
+Deno.test('static handler gives hashed assets immutable cache headers and contains symlinks', async () => {
+  const { createStaticHandler } = await import('../src/http/static.ts')
+  const encoder = new TextEncoder()
+  const contents = new Map([
+    ['/srv/index.html', encoder.encode('<!doctype html>')],
+    ['/srv/icon.svg', encoder.encode('<svg/>')],
+    ['/srv/assets/index-AbCd1234.css', encoder.encode('body { color: black }')],
+  ])
+  const handler = createStaticHandler('/srv', {
+    realPath(path) {
+      return Promise.resolve(path === '/srv/assets/leak.css' ? '/outside/leak.css' : path)
+    },
+    readFile(path) {
+      const content = contents.get(path)
+      if (!content) throw new Deno.errors.NotFound()
+      return Promise.resolve(content)
+    },
+    stat(path) {
+      const content = contents.get(path)
+      if (!content) throw new Deno.errors.NotFound()
+      return Promise.resolve({ isFile: true })
+    },
+  })
+  const get = async (path: string, method = 'GET') => {
+    const response = await handler(new Request(`http://localhost${path}`, { method }))
+    assert(response)
+    return response
+  }
+
+  const asset = await get('/assets/index-AbCd1234.css')
+  assertEquals(asset.status, 200)
+  assertEquals(asset.headers.get('cache-control'), 'public, max-age=31536000, immutable')
+  assertEquals(asset.headers.get('content-type'), 'text/css; charset=utf-8')
+  assertEquals(asset.headers.get('content-length'), null)
+
+  const head = await get('/assets/index-AbCd1234.css', 'HEAD')
+  assertEquals(head.headers.get('content-length'), null)
+  assertEquals(await head.text(), '')
+
+  const icon = await get('/icon.svg')
+  assertEquals(icon.headers.get('cache-control'), 'no-cache')
+
+  const fallback = await get('/calendar/month')
+  assertEquals(fallback.headers.get('cache-control'), 'no-cache')
+  assertEquals(await fallback.text(), '<!doctype html>')
+
+  assertEquals((await get('/assets/missing.js')).status, 404)
+  assertEquals((await get('/assets/leak.css')).status, 404)
 })
 
 Deno.test('unsupported methods return 405 and an Allow header', async () => {

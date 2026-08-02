@@ -17,6 +17,56 @@ const contentTypes: Readonly<Record<string, string>> = {
   '.woff2': 'font/woff2',
 }
 
+const immutableCache = 'public, max-age=31536000, immutable'
+
+export interface StaticFileSystem {
+  realPath(path: string): Promise<string>
+  readFile(path: string): Promise<Uint8Array<ArrayBuffer>>
+  stat(path: string): Promise<{ isFile: boolean }>
+}
+
+const denoFileSystem: StaticFileSystem = {
+  realPath: Deno.realPath,
+  readFile: Deno.readFile,
+  stat: Deno.stat,
+}
+
+export type StaticHandler = (request: Request) => Promise<Response | undefined>
+
+export function createStaticHandler(
+  root: string | undefined,
+  files: StaticFileSystem = denoFileSystem,
+): StaticHandler {
+  if (!root) return () => Promise.resolve(undefined)
+
+  const normalizedRoot = root.replace(/\/+$/, '') || '/'
+  const realRoot = realPathIfPresent(normalizedRoot, files)
+  return async (request) => {
+    const segments = safeSegments(new URL(request.url).pathname)
+    if (!segments) return notFound()
+
+    let relative = segments.join('/')
+    let file = await regularFile(realRoot, normalizedRoot, relative, files)
+    if (!file) {
+      if (hasExtension(relative)) return notFound()
+      relative = 'index.html'
+      file = await regularFile(realRoot, normalizedRoot, relative, files)
+    }
+    if (!file) return undefined
+
+    const headers = new Headers({
+      'cache-control': relative.startsWith('assets/') ? immutableCache : 'no-cache',
+      'content-type': contentType(relative),
+      'x-content-type-options': 'nosniff',
+    })
+    if (request.method === 'HEAD') {
+      // The compressed GET representation has a different size, so do not advertise source bytes.
+      return new Response(null, { headers })
+    }
+    return new Response(await files.readFile(file.path), { headers })
+  }
+}
+
 function contentType(path: string): string {
   const name = path.slice(path.lastIndexOf('/') + 1)
   const dot = name.lastIndexOf('.')
@@ -39,51 +89,62 @@ function safeSegments(pathname: string): string[] | undefined {
   return segments
 }
 
-async function regularFile(path: string): Promise<Deno.FileInfo | undefined> {
+function hasExtension(relative: string): boolean {
+  const name = relative.slice(relative.lastIndexOf('/') + 1)
+  return name.lastIndexOf('.') > 0
+}
+
+async function regularFile(
+  realRoot: Promise<string | undefined>,
+  root: string,
+  relative: string,
+  files: StaticFileSystem,
+): Promise<{ path: string } | undefined> {
+  const resolvedRoot = await realRoot
+  if (!resolvedRoot) return undefined
+
   try {
-    const info = await Deno.stat(path)
-    return info.isFile ? info : undefined
+    const path = await files.realPath(rootedPath(root, relative))
+    if (!isWithin(resolvedRoot, path)) return undefined
+    const info = await files.stat(path)
+    return info.isFile ? { path } : undefined
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound || error instanceof Deno.errors.NotADirectory) {
-      return undefined
-    }
+    if (isMissing(error)) return undefined
     throw error
   }
 }
 
-export type StaticHandler = (request: Request) => Promise<Response | undefined>
-
-export function createStaticHandler(root: string | undefined): StaticHandler {
-  if (!root) return () => Promise.resolve(undefined)
-
-  const normalizedRoot = root.replace(/\/+$/, '')
-  return async (request) => {
-    const segments = safeSegments(new URL(request.url).pathname)
-    if (!segments) {
-      return new Response('Not Found\n', {
-        status: 404,
-        headers: {
-          'content-type': 'text/plain; charset=utf-8',
-          'x-content-type-options': 'nosniff',
-        },
-      })
-    }
-
-    let relative = segments.join('/')
-    let path = `${normalizedRoot}/${relative}`
-    let info = await regularFile(path)
-    if (!info) {
-      relative = 'index.html'
-      path = `${normalizedRoot}/${relative}`
-      info = await regularFile(path)
-    }
-    if (!info) return undefined
-
-    const headers = new Headers({
-      'content-length': String(info.size),
-      'content-type': contentType(relative),
-    })
-    if (request.method === 'HEAD') return new Response(null, { headers })
-    return new Response(await Deno.readFile(path), { headers })
+async function realPathIfPresent(
+  path: string,
+  files: StaticFileSystem,
+): Promise<string | undefined> {
+  try {
+    return await files.realPath(path)
+  } catch (error) {
+    if (isMissing(error)) return undefined
+    throw error
   }
+}
+
+function rootedPath(root: string, relative: string): string {
+  return root === '/' ? `/${relative}` : `${root}/${relative}`
+}
+
+function isWithin(root: string, path: string): boolean {
+  const prefix = root.endsWith('/') ? root : `${root}/`
+  return path === root || path.startsWith(prefix)
+}
+
+function isMissing(error: unknown): boolean {
+  return error instanceof Deno.errors.NotFound || error instanceof Deno.errors.NotADirectory
+}
+
+function notFound(): Response {
+  return new Response('Not Found\n', {
+    status: 404,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+      'x-content-type-options': 'nosniff',
+    },
+  })
 }
