@@ -221,6 +221,20 @@ Deno.test('parseConfig preserves config validation errors', async (t) => {
   const cases: Array<[string, string, string]> = [
     ['no instances', "listen: ':8080'", 'at least one instance'],
     [
+      'non-mapping cache',
+      `cache: no
+instances:
+  - {name: x, type: radarr, url: 'http://a', api_key: k}`,
+      'cache must be a mapping',
+    ],
+    [
+      'non-integer window',
+      `calendar: {past_days: 1.5}
+instances:
+  - {name: x, type: radarr, url: 'http://a', api_key: k}`,
+      'calendar',
+    ],
+    [
       'bad type',
       `instances:
   - {name: x, type: lidarr, url: 'http://a', api_key: k}`,

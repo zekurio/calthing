@@ -1,20 +1,25 @@
+import { Type } from '@sinclair/typebox'
+
 import type { Instance } from '../config.ts'
 import { addUtcDays, type CalendarEvent, movieUid } from '../domain/event.ts'
-import { type ArrImage, calendarQuery, getJson, type HttpFetch, posterUrl } from './client.ts'
+import { calendarQuery, getJson, type HttpFetch, posterUrl } from './client.ts'
+import { ArrImageSchema } from './schemas.ts'
 
-interface RadarrMovie {
-  id: number
-  title: string
-  tmdbId?: number
-  inCinemas?: string
-  digitalRelease?: string
-  physicalRelease?: string
-  hasFile?: boolean
-  overview?: string
-  images?: ArrImage[]
-}
+const NullableStringSchema = Type.Union([Type.String(), Type.Null()])
+const RadarrMovieSchema = Type.Object({
+  id: Type.Number(),
+  title: Type.String(),
+  tmdbId: Type.Optional(Type.Number()),
+  inCinemas: Type.Optional(NullableStringSchema),
+  digitalRelease: Type.Optional(NullableStringSchema),
+  physicalRelease: Type.Optional(NullableStringSchema),
+  hasFile: Type.Optional(Type.Boolean()),
+  overview: Type.Optional(NullableStringSchema),
+  images: Type.Optional(Type.Union([Type.Array(ArrImageSchema), Type.Null()])),
+})
+const RadarrCalendarSchema = Type.Array(RadarrMovieSchema)
 
-function releaseDay(value: string | undefined): Date | undefined {
+function releaseDay(value: string | null | undefined): Date | undefined {
   if (!value) {
     return undefined
   }
@@ -32,7 +37,7 @@ export async function fetchRadarr(
   fetchFn: HttpFetch = fetch,
 ): Promise<CalendarEvent[]> {
   const query = calendarQuery(start, end, instance.includeUnmonitored)
-  const movies = await getJson<RadarrMovie[]>(instance, '/api/v3/calendar', query, fetchFn)
+  const movies = await getJson(instance, '/api/v3/calendar', query, RadarrCalendarSchema, fetchFn)
   const events: CalendarEvent[] = []
 
   for (const movie of movies) {

@@ -1,6 +1,10 @@
+import { type Static, type TSchema } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
+
 import type { Instance } from '../config.ts'
 import type { CalendarEvent } from '../domain/event.ts'
 import { fetchRadarr } from './radarr.ts'
+import type { ArrImage } from './schemas.ts'
 import { fetchSonarr } from './sonarr.ts'
 
 const requestTimeoutMs = 15_000
@@ -13,12 +17,7 @@ export type ArrFetch = (
   end: Date,
 ) => Promise<CalendarEvent[]>
 
-export interface ArrImage {
-  coverType?: string
-  remoteUrl?: string
-}
-
-export function posterUrl(images: ArrImage[] | undefined): string {
+export function posterUrl(images: ArrImage[] | null | undefined): string {
   return images?.find((image) => image.coverType === 'poster' && image.remoteUrl)?.remoteUrl ?? ''
 }
 
@@ -88,12 +87,13 @@ export function calendarQuery(start: Date, end: Date, unmonitored: boolean): URL
   })
 }
 
-export async function getJson<T>(
+export async function getJson<T extends TSchema>(
   instance: Instance,
   path: string,
   query: URLSearchParams,
+  schema: T,
   fetchFn: HttpFetch = fetch,
-): Promise<T> {
+): Promise<Static<T>> {
   const url = instanceUrl(instance, path)
   url.search = query.toString()
 
@@ -122,11 +122,18 @@ export async function getJson<T>(
       throw new Error(`instance ${instance.name}: ${path} returned ${response.status}: ${body}`)
     }
 
+    let payload: unknown
     try {
-      return await response.json() as T
+      payload = await response.json()
     } catch (error) {
       throw new Error(`instance ${instance.name}: decode response: ${errorMessage(error)}`)
     }
+    if (!Value.Check(schema, payload)) {
+      const first = Value.Errors(schema, payload).First()
+      const detail = first ? `${first.path || '/'} ${first.message.toLowerCase()}` : 'invalid value'
+      throw new Error(`instance ${instance.name}: decode response: ${detail}`)
+    }
+    return Value.Decode(schema, payload)
   } finally {
     clearTimeout(timeout)
   }

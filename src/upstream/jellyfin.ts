@@ -1,10 +1,10 @@
+import { type Static, type TSchema, Type } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
+
+import type { Config } from '../config.ts'
 import type { CalendarEvent } from '../domain/event.ts'
 
-export interface JellyfinConfig {
-  url: string
-  publicUrl: string
-  apiKey: string
-}
+export type JellyfinConfig = Config['jellyfin']
 
 export type HttpFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 export type DeviceId = (
@@ -20,24 +20,34 @@ export interface JellyfinUser {
   avatarUrl: string
 }
 
-interface JellyfinUserDto {
-  Id?: string
-  Name?: string
-  PrimaryImageTag?: string
-}
+const NullableStringSchema = Type.Union([Type.String(), Type.Null()])
+const JellyfinUserDtoSchema = Type.Object({
+  Id: Type.Optional(NullableStringSchema),
+  Name: Type.Optional(NullableStringSchema),
+  PrimaryImageTag: Type.Optional(NullableStringSchema),
+})
+const JellyfinItemSchema = Type.Object({
+  Id: Type.Optional(NullableStringSchema),
+  Name: Type.Optional(NullableStringSchema),
+  SeriesName: Type.Optional(NullableStringSchema),
+  Overview: Type.Optional(NullableStringSchema),
+  ProviderIds: Type.Optional(Type.Union([
+    Type.Record(Type.String(), Type.String()),
+    Type.Null(),
+  ])),
+})
 
-interface JellyfinItem {
-  Id?: string
-  Name?: string
-  SeriesName?: string
-  Overview?: string
-  ProviderIds?: Record<string, string>
-}
+const JellyfinItemsResponseSchema = Type.Object({
+  Items: Type.Optional(Type.Array(JellyfinItemSchema)),
+  TotalRecordCount: Type.Optional(Type.Number()),
+})
+const JellyfinAuthenticationResponseSchema = Type.Object({
+  AccessToken: Type.Optional(NullableStringSchema),
+  User: Type.Optional(Type.Union([JellyfinUserDtoSchema, Type.Null()])),
+})
 
-interface JellyfinItemsResponse {
-  Items?: JellyfinItem[]
-  TotalRecordCount?: number
-}
+type JellyfinUserDto = Static<typeof JellyfinUserDtoSchema>
+type JellyfinItem = Static<typeof JellyfinItemSchema>
 
 const DEFAULT_TIMEOUT_MS = 15_000
 const MAX_ERROR_BODY_BYTES = 512
@@ -54,7 +64,7 @@ function itemUrl(publicUrl: string, id: string): string {
   return url.toString()
 }
 
-function toUser(dto: JellyfinUserDto | undefined, publicUrl: string): JellyfinUser | null {
+function toUser(dto: JellyfinUserDto | null | undefined, publicUrl: string): JellyfinUser | null {
   if (!dto?.Id || !dto.Name) return null
   let avatarUrl = ''
   if (dto.PrimaryImageTag && publicUrl) {
@@ -87,14 +97,25 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-async function responseJson<T>(response: Response, context: string): Promise<T> {
+async function responseJson<T extends TSchema>(
+  response: Response,
+  context: string,
+  schema: T,
+): Promise<Static<T>> {
+  let payload: unknown
   try {
-    return await response.json() as T
+    payload = await response.json()
   } catch (error) {
     throw new Error(`jellyfin: ${context} returned invalid json: ${errorMessage(error)}`, {
       cause: error,
     })
   }
+  if (!Value.Check(schema, payload)) {
+    const first = Value.Errors(schema, payload).First()
+    const detail = first ? `${first.path || '/'} ${first.message.toLowerCase()}` : 'invalid value'
+    throw new Error(`jellyfin: ${context} returned invalid response: ${detail}`)
+  }
+  return Value.Decode(schema, payload)
 }
 
 async function responseError(response: Response, context: string): Promise<Error> {
@@ -168,10 +189,7 @@ export class JellyfinClient {
       }
       if (!response.ok) throw await responseError(response, context)
 
-      const payload = await responseJson<{ AccessToken?: string; User?: JellyfinUserDto }>(
-        response,
-        context,
-      )
+      const payload = await responseJson(response, context, JellyfinAuthenticationResponseSchema)
       const user = toUser(payload.User, this.#config.publicUrl)
       if (!payload.AccessToken || user === null) {
         throw new Error('jellyfin: /Users/AuthenticateByName response is missing token or user')
@@ -196,7 +214,7 @@ export class JellyfinClient {
       if (!response.ok) throw await responseError(response, context)
 
       const user = toUser(
-        await responseJson<JellyfinUserDto>(response, context),
+        await responseJson(response, context, JellyfinUserDtoSchema),
         this.#config.publicUrl,
       )
       if (user === null) throw new Error('jellyfin: /Users/Me response is missing user')
@@ -254,11 +272,7 @@ export class JellyfinClient {
         },
       }, async (response) => {
         if (!response.ok) throw await responseError(response, context)
-        const decoded = await responseJson<JellyfinItemsResponse>(response, context)
-        if (decoded.Items !== undefined && !Array.isArray(decoded.Items)) {
-          throw new Error('jellyfin: /Items response has invalid items')
-        }
-        return decoded
+        return await responseJson(response, context, JellyfinItemsResponseSchema)
       }, remainingMs)
 
       const items = payload.Items ?? []

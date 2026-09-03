@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from '@std/assert'
+import { assertEquals, assertRejects, assertStringIncludes } from '@std/assert'
 
 import type { CalendarEvent } from '../src/domain/event.ts'
 import { JellyfinClient } from '../src/upstream/jellyfin.ts'
@@ -55,6 +55,20 @@ Deno.test('Jellyfin matches TVDB episode IDs and emits only the public item URL'
   assertEquals(events[0]?.overview, 'Deutsche Beschreibung')
   assertEquals(events[1]?.jellyfinUrl, undefined)
   assertStringIncludes(requested?.toString() ?? '', 'jellyfin.internal')
+})
+
+Deno.test('Jellyfin response schemas reject invalid users', async () => {
+  const client = new JellyfinClient({
+    url: 'http://jellyfin.internal:8096',
+    publicUrl: 'https://watch.example',
+    apiKey: '',
+  }, () => Promise.resolve(Response.json({ Id: 42, Name: 'alice' })))
+
+  await assertRejects(
+    () => client.user('jf-token'),
+    Error,
+    'jellyfin: /Users/Me returned invalid response: /Id',
+  )
 })
 
 Deno.test('Jellyfin errors include bounded upstream context', async () => {

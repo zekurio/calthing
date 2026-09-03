@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 - calthing merges the calendar APIs of any number of Radarr/Sonarr instances into one iCal feed and
-  a web calendar. The Deno + Elysia backend lives in `src/` (`upstream/` ARR and Jellyfin clients,
+  a web calendar. The Deno + Hono backend lives in `src/` (`upstream/` ARR and Jellyfin clients,
   `services/` fetching/caching, iCal rendering, feed tokens, `http/` routes and static serving,
   `config.ts` YAML parsing); the Svelte 5 frontend is in `frontend/src/`; browser-safe DTOs are in
   `shared/api.ts`; tests and fixtures in `tests/`; Nix package, NixOS module, and the dependency
@@ -112,11 +112,10 @@ The backend computes in UTC (`utcStartOfDay`, `addUtcDays`) and DTOs carry RFC33
 
 ## Repo Patterns
 
-- Routes are chained Elysia handlers in `src/http/app.ts` with TypeBox `query`/`body`/`response`
-  schemas. `export type App` is imported type-only by the Eden client in `frontend/src/lib/api.ts`,
-  so every new status code or field must be declared in the route's `response` schema or the
-  frontend cannot see it.
-- Handlers return errors via `status(code, 'message\n')` plus `errorHeaders` (plain text,
+- Routes are chained Hono handlers in `src/http/app.ts`, with request validation backed by TypeBox.
+  `export type AppType` is imported type-only by the Hono RPC client in `frontend/src/lib/api.ts`,
+  so preserve the route chain and return typed responses for every status code.
+- Handlers return errors via `context.text('message\n', code, errorHeaders)` (plain text,
   `nosniff`); they never throw. Unsupported methods answer 405 with an `Allow` header.
 - All ARR HTTP goes through `getJson` in `src/upstream/client.ts`: `X-Api-Key`, 15s abort timeout,
   error bodies truncated to 512 bytes.
@@ -127,11 +126,11 @@ The backend computes in UTC (`utcStartOfDay`, `addUtcDays`) and DTOs carry RFC33
   re-validated per request, so revoking in Jellyfin logs the visitor out here. Calendar clients use
   `<userId>.<HMAC-SHA256>` feed tokens from `src/services/tokens.ts`, which grant feed access only.
   Jellyfin `api_key` and the private `url` must never reach the browser.
-- `src/config.ts` parses YAML by hand through `record`/`stringValue`/`integerValue`/`parseDuration`,
-  expands `${VAR}` from the environment, and fails loudly on unset references — extend those helpers
-  instead of adding ad-hoc casts.
+- `src/config.ts` decodes YAML through `RawConfigSchema`, applies defaults and duration parsing,
+  expands `${VAR}` from the environment, and fails loudly on unset references. Extend the schemas
+  and parsing helpers instead of adding ad-hoc casts.
 - Frontend data loading uses TanStack Query (`createQuery` keyed by `['events', start, end]`) and
-  passes the query `AbortSignal` into Eden; no component calls `fetch` directly.
+  passes the query `AbortSignal` into Hono RPC; no component calls `fetch` directly.
 - Tests use `Deno.test` with behavior-sentence names, `t.step` for shared expectations, injected
   fakes, and JSON fixtures in `tests/fixtures/` — never live ARR or Jellyfin services.
 - `nix/package.nix` pins an explicit source fileset; new top-level source directories must be added
