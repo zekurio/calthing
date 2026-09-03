@@ -1,24 +1,32 @@
+import { Type } from '@sinclair/typebox'
+
 import type { Instance } from '../config.ts'
 import { type CalendarEvent, episodeUid } from '../domain/event.ts'
-import { type ArrImage, calendarQuery, getJson, type HttpFetch, posterUrl } from './client.ts'
+import { calendarQuery, getJson, type HttpFetch, posterUrl } from './client.ts'
+import { ArrImageSchema } from './schemas.ts'
 
 const defaultEpisodeRuntimeMinutes = 30
 
-interface SonarrEpisode {
-  id: number
-  title: string
-  seasonNumber: number
-  episodeNumber: number
-  airDateUtc?: string
-  hasFile?: boolean
-  overview?: string
-  tvdbId?: number
-  series?: {
-    title: string
-    runtime?: number
-    images?: ArrImage[]
-  }
-}
+const NullableStringSchema = Type.Union([Type.String(), Type.Null()])
+const SonarrEpisodeSchema = Type.Object({
+  id: Type.Number(),
+  title: Type.String(),
+  seasonNumber: Type.Number(),
+  episodeNumber: Type.Number(),
+  airDateUtc: Type.Optional(NullableStringSchema),
+  hasFile: Type.Optional(Type.Boolean()),
+  overview: Type.Optional(NullableStringSchema),
+  tvdbId: Type.Optional(Type.Number()),
+  series: Type.Optional(Type.Union([
+    Type.Object({
+      title: Type.String(),
+      runtime: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      images: Type.Optional(Type.Union([Type.Array(ArrImageSchema), Type.Null()])),
+    }),
+    Type.Null(),
+  ])),
+})
+const SonarrCalendarSchema = Type.Array(SonarrEpisodeSchema)
 
 export async function fetchSonarr(
   instance: Instance,
@@ -28,7 +36,7 @@ export async function fetchSonarr(
 ): Promise<CalendarEvent[]> {
   const query = calendarQuery(start, end, instance.includeUnmonitored)
   query.set('includeSeries', 'true')
-  const episodes = await getJson<SonarrEpisode[]>(instance, '/api/v3/calendar', query, fetchFn)
+  const episodes = await getJson(instance, '/api/v3/calendar', query, SonarrCalendarSchema, fetchFn)
   const events: CalendarEvent[] = []
 
   for (const episode of episodes) {

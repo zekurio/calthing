@@ -119,6 +119,36 @@ Deno.test('Radarr request and release normalization match the ARR contract', asy
   assertEquals(digital.episode, 0)
 })
 
+Deno.test('ARR response schemas reject invalid calendar payloads', async () => {
+  const instance: Instance = {
+    name: 'broken',
+    type: 'sonarr',
+    url: 'https://arr.example',
+    apiKey: 'key',
+    includeUnmonitored: false,
+  }
+  let error: unknown
+  try {
+    await fetchCalendar(
+      instance,
+      start,
+      end,
+      async () =>
+        Response.json([{
+          id: 'not-a-number',
+          title: 'Episode',
+          seasonNumber: 1,
+          episodeNumber: 1,
+        }]),
+    )
+  } catch (cause) {
+    error = cause
+  }
+  assert(error instanceof Error, 'invalid payload should reject')
+  assert(error.message.includes('instance broken: decode response:'), 'error should name boundary')
+  assert(error.message.includes('/0/id'), 'error should name invalid field')
+})
+
 Deno.test('ARR errors name the instance and bound upstream body text', async () => {
   const instance: Instance = {
     name: 'broken',

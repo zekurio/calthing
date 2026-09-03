@@ -1,41 +1,97 @@
 import { parse as parseYaml } from '@std/yaml'
-import { MAX_CALENDAR_WINDOW_DAYS, type Source } from '../shared/api.ts'
+import { type Static, Type } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
+import { BrandingDtoSchema, MAX_CALENDAR_WINDOW_DAYS, SourceSchema } from '../shared/api.ts'
 
 export type Env = Record<string, string | undefined>
 
-export interface Instance {
-  name: string
-  type: Source
-  url: string
-  apiKey: string
-  includeUnmonitored: boolean
-}
+export const InstanceSchema = Type.Object({
+  name: Type.String(),
+  type: SourceSchema,
+  url: Type.String(),
+  apiKey: Type.String(),
+  includeUnmonitored: Type.Boolean(),
+})
 
-export interface Config {
-  listen: string
-  cache: {
-    ttlMs: number
-  }
-  calendar: {
-    pastDays: number
-    futureDays: number
-    name: string
-    availabilityDelayMs: number
-    feedSecret: string
-  }
-  branding: {
-    name: string
-    iconUrl: string
-    pageTitle: string
-    description: string
-  }
-  jellyfin: {
-    url: string
-    publicUrl: string
-    apiKey: string
-  }
-  instances: Instance[]
-}
+export type Instance = Static<typeof InstanceSchema>
+
+export const ConfigSchema = Type.Object({
+  listen: Type.String(),
+  cache: Type.Object({ ttlMs: Type.Number() }),
+  calendar: Type.Object({
+    pastDays: Type.Integer(),
+    futureDays: Type.Integer(),
+    name: Type.String(),
+    availabilityDelayMs: Type.Number(),
+    feedSecret: Type.String(),
+  }),
+  branding: BrandingDtoSchema,
+  jellyfin: Type.Object({
+    url: Type.String(),
+    publicUrl: Type.String(),
+    apiKey: Type.String(),
+  }),
+  instances: Type.Array(InstanceSchema),
+})
+
+export type Config = Static<typeof ConfigSchema>
+
+const StringInputSchema = Type.Union([
+  Type.String(),
+  Type.Number(),
+  Type.Boolean(),
+  Type.Null(),
+])
+const IntegerInputSchema = Type.Union([Type.Integer(), Type.Null()])
+const BooleanInputSchema = Type.Union([Type.Boolean(), Type.Null()])
+const RawInstanceSchema = Type.Object({
+  name: Type.Optional(StringInputSchema),
+  type: Type.Optional(StringInputSchema),
+  url: Type.Optional(StringInputSchema),
+  api_key: Type.Optional(StringInputSchema),
+  include_unmonitored: Type.Optional(BooleanInputSchema),
+})
+const RawConfigSchema = Type.Object({
+  listen: Type.Optional(StringInputSchema),
+  cache: Type.Optional(Type.Union([
+    Type.Object({ ttl: Type.Optional(StringInputSchema) }),
+    Type.Null(),
+  ])),
+  calendar: Type.Optional(Type.Union([
+    Type.Object({
+      past_days: Type.Optional(IntegerInputSchema),
+      future_days: Type.Optional(IntegerInputSchema),
+      name: Type.Optional(StringInputSchema),
+      availability_delay: Type.Optional(StringInputSchema),
+      feed_secret: Type.Optional(StringInputSchema),
+    }),
+    Type.Null(),
+  ])),
+  branding: Type.Optional(Type.Union([
+    Type.Object({
+      name: Type.Optional(StringInputSchema),
+      icon_url: Type.Optional(StringInputSchema),
+      page_title: Type.Optional(StringInputSchema),
+      description: Type.Optional(StringInputSchema),
+    }),
+    Type.Null(),
+  ])),
+  jellyfin: Type.Optional(Type.Union([
+    Type.Object({
+      url: Type.Optional(StringInputSchema),
+      public_url: Type.Optional(StringInputSchema),
+      api_key: Type.Optional(StringInputSchema),
+    }),
+    Type.Null(),
+  ])),
+  instances: Type.Optional(Type.Array(Type.Union([RawInstanceSchema, Type.Null()]))),
+})
+
+type RawConfig = Static<typeof RawConfigSchema>
+type RawInstance = Static<typeof RawInstanceSchema>
+type StringInput = Static<typeof StringInputSchema>
+type IntegerInput = Static<typeof IntegerInputSchema>
+type BooleanInput = Static<typeof BooleanInputSchema>
 
 const DEFAULT_LISTEN = ':8080'
 const DEFAULT_TTL_MS = 10 * 60 * 1000
@@ -55,10 +111,8 @@ const DURATION_UNITS: Readonly<Record<string, number>> = {
   h: 60 * 60 * 1000,
 }
 
-function parseDuration(value: unknown): number {
-  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
-    throw new Error(`invalid duration ${JSON.stringify(value)}`)
-  }
+function parseDuration(value: StringInput): number {
+  if (value === null) throw new Error(`invalid duration ${JSON.stringify(value)}`)
   const duration = String(value)
   if (duration === '0') return 0
 
@@ -111,48 +165,39 @@ function expandEnv(raw: string, env: Env): string {
   return expanded
 }
 
-function record(value: unknown, path: string): Record<string, unknown> {
-  if (value === undefined || value === null) return {}
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`parse config: ${path} must be a mapping`)
+function stringValue(value: StringInput | undefined, fallback: string): string {
+  if (value === undefined || value === null) return fallback
+  return String(value)
+}
+
+function integerValue(value: IntegerInput | undefined, fallback: number): number {
+  return value ?? fallback
+}
+
+function booleanValue(value: BooleanInput | undefined, fallback: boolean): boolean {
+  return value ?? fallback
+}
+
+function parseInstance(value: RawInstance | null, index: number): Instance {
+  const raw = value ?? {}
+  const name = stringValue(raw.name, '')
+  if (name === '') {
+    throw new Error(`config: instances[${index}]: name is required`)
   }
-  return value as Record<string, unknown>
-}
-
-function stringValue(value: unknown, fallback: string, path: string): string {
-  if (value === undefined || value === null) return fallback
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  throw new Error(`parse config: ${path} must be a string`)
-}
-
-function integerValue(value: unknown, fallback: number, path: string): number {
-  if (value === undefined || value === null) return fallback
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    throw new Error(`parse config: ${path} must be an integer`)
+  const type = stringValue(raw.type, '')
+  if (type !== 'radarr' && type !== 'sonarr') {
+    throw new Error(
+      `config: instance ${JSON.stringify(name)}: type must be "radarr" or "sonarr", got ${
+        JSON.stringify(type)
+      }`,
+    )
   }
-  return value
-}
-
-function booleanValue(value: unknown, fallback: boolean, path: string): boolean {
-  if (value === undefined || value === null) return fallback
-  if (typeof value !== 'boolean') throw new Error(`parse config: ${path} must be a boolean`)
-  return value
-}
-
-function parseInstance(value: unknown, index: number): Instance {
-  const raw = record(value, `instances[${index}]`)
-  const type = stringValue(raw.type, '', `instances[${index}].type`)
   return {
-    name: stringValue(raw.name, '', `instances[${index}].name`),
-    type: type as Source,
-    url: stringValue(raw.url, '', `instances[${index}].url`),
-    apiKey: stringValue(raw.api_key, '', `instances[${index}].api_key`),
-    includeUnmonitored: booleanValue(
-      raw.include_unmonitored,
-      false,
-      `instances[${index}].include_unmonitored`,
-    ),
+    name,
+    type,
+    url: stringValue(raw.url, ''),
+    apiKey: stringValue(raw.api_key, ''),
+    includeUnmonitored: booleanValue(raw.include_unmonitored, false),
   }
 }
 
@@ -218,13 +263,6 @@ function validate(config: Config): void {
       throw new Error(`config: duplicate instance name ${JSON.stringify(instance.name)}`)
     }
     names.add(instance.name)
-    if (instance.type !== 'radarr' && instance.type !== 'sonarr') {
-      throw new Error(
-        `config: instance ${
-          JSON.stringify(instance.name)
-        }: type must be "radarr" or "sonarr", got ${JSON.stringify(instance.type)}`,
-      )
-    }
 
     let url: URL
     try {
@@ -263,14 +301,11 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
     throw new Error(`parse config: ${error instanceof Error ? error.message : String(error)}`)
   }
 
-  const root = record(parsed, 'root')
-  const cache = record(root.cache, 'cache')
-  const calendar = record(root.calendar, 'calendar')
-  const branding = record(root.branding, 'branding')
-  const jellyfin = record(root.jellyfin, 'jellyfin')
-  if (root.instances !== undefined && !Array.isArray(root.instances)) {
-    throw new Error('parse config: instances must be a sequence')
-  }
+  const root = decodeRawConfig(parsed ?? {})
+  const cache = root.cache ?? {}
+  const calendar = root.calendar ?? {}
+  const branding = root.branding ?? {}
+  const jellyfin = root.jellyfin ?? {}
 
   let ttlMs = DEFAULT_TTL_MS
   if (cache.ttl !== undefined && cache.ttl !== null) {
@@ -290,25 +325,25 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
   }
 
   const config: Config = {
-    listen: stringValue(root.listen, DEFAULT_LISTEN, 'listen'),
+    listen: stringValue(root.listen, DEFAULT_LISTEN),
     cache: { ttlMs },
     calendar: {
-      pastDays: integerValue(calendar.past_days, DEFAULT_PAST_DAYS, 'calendar.past_days'),
-      futureDays: integerValue(calendar.future_days, DEFAULT_FUTURE_DAYS, 'calendar.future_days'),
-      name: stringValue(calendar.name, DEFAULT_CALENDAR_NAME, 'calendar.name'),
+      pastDays: integerValue(calendar.past_days, DEFAULT_PAST_DAYS),
+      futureDays: integerValue(calendar.future_days, DEFAULT_FUTURE_DAYS),
+      name: stringValue(calendar.name, DEFAULT_CALENDAR_NAME),
       availabilityDelayMs,
-      feedSecret: stringValue(calendar.feed_secret, '', 'calendar.feed_secret'),
+      feedSecret: stringValue(calendar.feed_secret, ''),
     },
     branding: {
-      name: stringValue(branding.name, DEFAULT_BRAND_NAME, 'branding.name'),
-      iconUrl: stringValue(branding.icon_url, '', 'branding.icon_url'),
-      pageTitle: stringValue(branding.page_title, '', 'branding.page_title'),
-      description: stringValue(branding.description, '', 'branding.description'),
+      name: stringValue(branding.name, DEFAULT_BRAND_NAME),
+      iconUrl: stringValue(branding.icon_url, ''),
+      pageTitle: stringValue(branding.page_title, ''),
+      description: stringValue(branding.description, ''),
     },
     jellyfin: {
-      url: stringValue(jellyfin.url, '', 'jellyfin.url'),
-      publicUrl: stringValue(jellyfin.public_url, '', 'jellyfin.public_url'),
-      apiKey: stringValue(jellyfin.api_key, '', 'jellyfin.api_key'),
+      url: stringValue(jellyfin.url, ''),
+      publicUrl: stringValue(jellyfin.public_url, ''),
+      apiKey: stringValue(jellyfin.api_key, ''),
     },
     instances: (root.instances ?? []).map(parseInstance),
   }
@@ -316,7 +351,7 @@ export function parseConfig(raw: string, env: Env = Deno.env.toObject()): Config
   if (env.CALTHING_LISTEN) config.listen = env.CALTHING_LISTEN
 
   validate(config)
-  return config
+  return Value.Decode(ConfigSchema, config)
 }
 
 export async function loadConfig(path: string, env: Env = Deno.env.toObject()): Promise<Config> {
@@ -327,4 +362,91 @@ export async function loadConfig(path: string, env: Env = Deno.env.toObject()): 
     throw new Error(`read config: ${error instanceof Error ? error.message : String(error)}`)
   }
   return parseConfig(raw, env)
+}
+
+function decodeRawConfig(value: unknown): RawConfig {
+  if (Value.Check(RawConfigSchema, value)) return Value.Decode(RawConfigSchema, value)
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('parse config: root must be a mapping')
+  }
+  for (const key of ['cache', 'calendar', 'branding', 'jellyfin'] as const) {
+    const nested = Reflect.get(value, key)
+    if (
+      nested !== undefined && nested !== null &&
+      (typeof nested !== 'object' || Array.isArray(nested))
+    ) {
+      throw new Error(`parse config: ${key} must be a mapping`)
+    }
+  }
+  const instances = Reflect.get(value, 'instances')
+  if (instances !== undefined && !Array.isArray(instances)) {
+    throw new Error('parse config: instances must be a sequence')
+  }
+  for (let index = 0; index < (instances?.length ?? 0); index++) {
+    const instance = instances?.[index]
+    if (instance !== null && (typeof instance !== 'object' || Array.isArray(instance))) {
+      throw new Error(`parse config: instances[${index}] must be a mapping`)
+    }
+    for (const key of ['name', 'type', 'url', 'api_key'] as const) {
+      const field = property(instance, key)
+      if (
+        field !== undefined && field !== null && typeof field !== 'string' &&
+        typeof field !== 'number' && typeof field !== 'boolean'
+      ) {
+        throw new Error(`parse config: instances[${index}].${key} must be a string`)
+      }
+    }
+    const includeUnmonitored = property(instance, 'include_unmonitored')
+    if (
+      includeUnmonitored !== undefined && includeUnmonitored !== null &&
+      typeof includeUnmonitored !== 'boolean'
+    ) {
+      throw new Error(`parse config: instances[${index}].include_unmonitored must be a boolean`)
+    }
+  }
+
+  const stringValues = [
+    ['listen', Reflect.get(value, 'listen')],
+    ['calendar.name', property(Reflect.get(value, 'calendar'), 'name')],
+    ['calendar.feed_secret', property(Reflect.get(value, 'calendar'), 'feed_secret')],
+    ['branding.name', property(Reflect.get(value, 'branding'), 'name')],
+    ['branding.icon_url', property(Reflect.get(value, 'branding'), 'icon_url')],
+    ['branding.page_title', property(Reflect.get(value, 'branding'), 'page_title')],
+    ['branding.description', property(Reflect.get(value, 'branding'), 'description')],
+    ['jellyfin.url', property(Reflect.get(value, 'jellyfin'), 'url')],
+    ['jellyfin.public_url', property(Reflect.get(value, 'jellyfin'), 'public_url')],
+    ['jellyfin.api_key', property(Reflect.get(value, 'jellyfin'), 'api_key')],
+  ] as const
+  for (const [path, field] of stringValues) {
+    if (
+      field !== undefined && field !== null && typeof field !== 'string' &&
+      typeof field !== 'number' && typeof field !== 'boolean'
+    ) {
+      throw new Error(`parse config: ${path} must be a string`)
+    }
+  }
+
+  for (
+    const [path, field] of [
+      ['calendar.past_days', property(Reflect.get(value, 'calendar'), 'past_days')],
+      ['calendar.future_days', property(Reflect.get(value, 'calendar'), 'future_days')],
+    ] as const
+  ) {
+    if (
+      field !== undefined && field !== null &&
+      (typeof field !== 'number' || !Number.isInteger(field))
+    ) {
+      throw new Error(`parse config: ${path} must be an integer`)
+    }
+  }
+
+  const first = Value.Errors(RawConfigSchema, value).First()
+  const path = first?.path ? first.path.slice(1).replaceAll('/', '.') : 'root'
+  throw new Error(`parse config: ${path} ${first?.message.toLowerCase() ?? 'is invalid'}`)
+}
+
+function property(value: unknown, key: string): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  return Reflect.get(value, key)
 }

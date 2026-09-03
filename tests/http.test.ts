@@ -82,12 +82,12 @@ const stubAuth: AuthClient = {
   async logout() {},
 }
 
-function request(
+async function request(
   app: ReturnType<typeof createApp>,
   path: string,
   init?: RequestInit,
 ): Promise<Response> {
-  return app.handle(new Request(`http://localhost${path}`, init))
+  return await app.fetch(new Request(`http://localhost${path}`, init))
 }
 
 Deno.test('events returns DTOs, statuses, exact windows, and request logs', async () => {
@@ -307,6 +307,51 @@ Deno.test('auth disabled keeps the API and feed public and /api/me anonymous', a
   assertEquals(login.status, 404)
 })
 
+Deno.test('login rejects malformed bodies before calling Jellyfin', async () => {
+  let calls = 0
+  const app = createApp({
+    config: copyConfig('feed-secret'),
+    auth: {
+      async authenticate() {
+        calls++
+        return null
+      },
+      async user() {
+        return null
+      },
+      async logout() {},
+    },
+    logger: { info() {} },
+    fetcher: {
+      async fetch() {
+        return { events: [], instances: [] }
+      },
+    },
+  })
+
+  for (
+    const init of [
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: '', password: 'right', deviceId: browserDeviceId }),
+      },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: 'alice', password: 'right', deviceId: 'not-a-uuid' }),
+      },
+    ] satisfies RequestInit[]
+  ) {
+    const response = await request(app, '/api/auth', init)
+    assertEquals(response.status, 400)
+    assertEquals(await response.text(), 'invalid request\n')
+    assertEquals(response.headers.get('x-content-type-options'), 'nosniff')
+  }
+  assertEquals(calls, 0)
+})
+
 Deno.test('login answers 502 when Jellyfin is unreachable', async () => {
   const app = createApp({
     config: copyConfig('feed-secret'),
@@ -403,6 +448,11 @@ Deno.test('unsupported methods return 405 and an Allow header', async () => {
       },
     },
   })
+  for (const path of ['/api', '/api/missing']) {
+    const response = await request(app, path)
+    assertEquals(response.status, 404, path)
+    assertEquals(await response.text(), 'Not Found\n', path)
+  }
   for (const path of ['/api/events', '/api/health', '/calendar.ics']) {
     const response = await request(app, path, { method: 'HEAD' })
     assertEquals(response.status, 200, path)

@@ -69,7 +69,7 @@ Deno.test('importing main does not start a server and buildApp wires health with
     instances: [],
   }
   const app = buildApp(config)
-  const response = await app.handle(new Request('http://localhost/api/health'))
+  const response = await app.fetch(new Request('http://localhost/api/health'))
   assertEquals(response.status, 200)
   assertEquals(await response.json(), { status: 'ok', instances: 0 })
 })
